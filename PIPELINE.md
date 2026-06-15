@@ -11,7 +11,7 @@ python main.py --input data/hospital_dirty.csv \
   --rules-out data/hospital_rules.json
 
 # 2. Stage 2（依赖 clean_mask）
-python -m stage_2.cli            # 默认 mode=fuse（DAE 单元格级 + GANomaly 行级）
+python -m stage_2.cli            # 统一条件预测模型（无需选择模式）
 
 # 3. Stage 3（依赖 combined_candidates）
 python -m stage_3.cli
@@ -31,7 +31,7 @@ python -m stage_3.evaluate
 flowchart LR
     subgraph funnel["三层漏斗"]
         S1["Stage 1 规则层<br/>高精度 · 可解释<br/>召回 ~85%"]
-        S2["Stage 2 分布层<br/>补软异常 · 无监督<br/>补 Stage1 盲点"]
+        S2["Stage 2 条件预测层<br/>P(列|其余列) · 无监督<br/>分布异常 + 键->值冲突"]
         S3["Stage 3 LLM 精检<br/>确认 · 分类 · 修复<br/>过滤误报"]
     end
     IN["脏表 CSV"] --> S1 --> S2 --> S3 --> OUT["final_errors.csv"]
@@ -82,39 +82,39 @@ flowchart LR
 
 ---
 
-### Stage 2 — 分布异常层（补软异常、无监督）
+### Stage 2 — 条件预测层（无监督，分布异常 + 键->值冲突）
 
-**定位：** 流水线的第二道关卡，在 Stage 1 已标记的「干净子集」上学习**正确数据的联合分布**，对全量数据打分，检出规则层漏掉的**分布异常**（DIST）。完全无监督，不依赖 ground truth 标签。
+**定位：** 流水线的第二道关卡，在 Stage 1 已标记的「干净子集」上学习每一列的**条件分布** `P(列 | 其余列)`，对全量数据打分，检出规则层漏掉的可疑单元格（统一标 `DIST`）。完全无监督，不依赖 ground truth 标签，**一个通用模型、无需按数据集路由**。
+
+**核心思想：** 一个单元格是否为错误，取决于「它的取值能否由同一行其余列预测出来」。该单一机制同时覆盖两类错误：
+
+| 错误类型 | 例子 | 为什么能抓到 |
+|------|------|------|
+| **分布型异常** | 拼写、未知类别、数值越界（hospital） | 行上下文给观测值低概率 / 大残差 |
+| **键->值冲突 / 真值发现** | 某来源把航班时刻写错（flights） | `P(time \| flight)` 集中在该航班共识取值，偏离者得到低概率 |
 
 **核心职责：**
 
 | 职责 | 说明 |
 |------|------|
-| 表格编码 | 将混合类型表格转为数值张量，保留列→切片映射，支持误差还原到单元格 |
-| 分布建模 | 在整行干净的样本上训练 DAE / GANomaly，学习正常联合分布 |
-| 异常打分 | 对全量行（含脏行）计算重构误差或隐空间偏差，还原为逐列贡献 |
-| 候选筛选 | 按列鲁棒归一化 + 分位阈值 + 每行 top-N，筛出可疑单元格 |
-| 双模型融合 | DAE 负责单元格级，GANomaly 负责行级/多列联合，融合后送 Stage 3 |
+| 身份保留编码 | 提高类别基数上限（默认 500），让键列（`flight`）与中等基数列（时刻）以 one-hot 身份进入；仅超高基数文本走 surrogate |
+| 条件建模 | 在整行干净样本上训练 `ConditionalPredictor`：屏蔽一列，用其余列预测它（masked-column） |
+| 似然打分 | 对全量行预测：类别 `-log P(观测值)`、数值标准化残差、surrogate 形态重构 MSE |
+| 双闸门筛选 | 逐列干净分位阈值 + 精度闸门 `margin`（备选类显著更优才报，并给 `suggested_fix`）+ 可预测性闸门（难预测列跳过） |
 | 与 Stage 1 合并 | 按 `(row_id, column)` 去重，Stage 1 优先，产出 `combined_candidates.csv` |
 
-**双模型角色分工：**
+**为什么替换旧的 DAE/GANomaly：** 旧版把高基数列（`flight`、各时刻列）一律丢进 surrogate 哈希通道，键与取值的**身份被抹掉**，无法学到 `flight -> time`，在 flights 上只会标记「长度异常的格式」而漏掉真正冲突，合并精度从 0.999 崩到 0.814。条件预测 + 身份保留编码从根本上解决该问题。
 
-| 模型 | 角色 | 检测逻辑 | 适用场景 |
-|------|------|---------|---------|
-| **DAE** | 单元格级定位专家 | 去噪自编码器：按列遮蔽训练，推断时重构误差大的格为异常；混合头（数值线性 / 类别 softmax / UNK·null sigmoid） | 类别脏值、未知枚举、缺失、拼写 typo、数值离群；**小表主力** |
-| **GANomaly** | 行级 / 多列联合专家 | 重构式 GAN + feature-matching：隐空间偏差 + 判别器特征偏差作为行级异常分，行内 top-k 列粗定位 | 多列联合分布异常、行级整体不合理；**大表 / 连续特征场景主力**，小表上从严控误报 |
+**编码层要点：**
 
-**编码层要点（决定 Stage 2 能否检出）：**
-
-- 类别列：`one-hot` + `__UNK__`（未知/脏值点亮，产生明显重构误差）+ 频率特征 + `is_null`
-- 数值列：单位感知解析（`97%`、`33 patients`）+ median/IQR 归一化 + `is_null`
-- 高基数文本：surrogate 特征（长度、字符比例、频次、是否在干净集、n-gram hash），不再直接丢弃
-- ID 列（ProviderNumber / ZipCode / PhoneNumber）：不当数值量纲，走类别/UNK 通道
+- 类别/键/中等基数列（含时刻、ID）：`one-hot` + `__UNK__` + 频率 + `is_null`，作 `categorical` 目标头
+- 数值列：单位感知解析（`97%`、`33 patients`）+ median/IQR 归一化 + `is_null`，作 `numeric` 目标头
+- 超高基数文本（> 上限）：surrogate 特征（长度、字符比例、频次、是否在干净集、n-gram hash），作 `surrogate` 目标头
 
 **擅长与不擅长：**
 
-- **擅长：** Stage 1 漏掉的类别 typo（如 `HospitalType`）；未知枚举/非法取值；数值离群；编码修复后 DIST 召回从约 0.14 提升至约 0.47（同等精度）。
-- **不擅长：** 弱可预测列（如 `Sample` 计数）；需强跨列语义一致性的列（如 `CountyName` 与 City）；Stage 2 单独精度低于 Stage 1，误报需交 Stage 3 过滤。
+- **擅长：** Stage 1 漏掉的类别 typo / 未知枚举；数值离群；**多来源键->值冲突（如航班时刻）**——这是旧设计完全无能为力的。
+- **不擅长：** 天然无强共识的列（如航班 `act_*` 实际时刻、`Sample` 计数）；标识列自身（由可预测性闸门跳过）；Stage 2 单独精度低于 Stage 1，误报交 Stage 3 过滤。
 
 **输入 / 输出：**
 
@@ -123,11 +123,10 @@ flowchart LR
 | 输入 | `data/hospital_dirty.csv` | 待检测脏表 |
 | 输入 | `clean_mask.csv` | Stage 1 干净掩码（训练必需） |
 | 输入 | `data/hospital_errors.csv` | 用于合并去重 |
-| 输出 | `data/stage2_candidates.csv` | 融合后的 DIST 候选（含 `subtype`: cell/row） |
-| 输出 | `data/stage2_dae.csv`、`data/stage2_ganomaly.csv` | 两模型单独候选（调试/评估） |
+| 输出 | `data/stage2_candidates.csv` | DIST 候选（含 `suggested_fix`、`subtype`: categorical/numeric/surrogate） |
 | 输出 | `data/combined_candidates.csv` | Stage1 ∪ Stage2 合并（**Stage 3 输入**） |
 
-**关键参数：** `quantile`（DAE 逐列阈值）、`max_cells_per_row`（抑制误差涂抹）、`row_quantile` / `row_top_k`（GANomaly 行级通道）。
+**关键参数：** `quantile`（逐列干净分位阈值）、`margin`（类别精度闸门）、`min_predictability`（可预测性闸门，跳过标识列）、`max_cells_per_row`（每行 top-N，0=不限）。
 
 ---
 
@@ -178,7 +177,7 @@ flowchart LR
 
 | 维度 | Stage 1 | Stage 2 | Stage 3 |
 |------|---------|---------|---------|
-| 检测范式 | 规则 + 统计 | 无监督分布建模 | LLM 语义推理 |
+| 检测范式 | 规则 + 统计 | 无监督条件预测 P(列\|其余列) | LLM 语义推理 |
 | 主要目标 | 高精度召回明确错误 | 补规则层盲点 | 确认、分类、过滤误报 |
 | 错误类型 | MV / FI / T / VAD | DIST | 维持前序或细化为 VAD/FI/OTHER/NONE |
 | 可解释性 | 高（规则、reason） | 中（重构误差、列贡献） | 高（llm_reason、suggested_fix） |
@@ -321,21 +320,16 @@ flowchart TD
     READ --> CHECK["检查整行干净行数<br/>row_clean = mask.all(axis=1)"]
 
     CHECK --> ENC_FIT["TabularEncoder.fit<br/>仅用干净单元格估参"]
-    ENC_FIT --> ENC_DETAIL["数值(单位感知)+is_null<br/>类别 one-hot+__UNK__+频率<br/>高基数 surrogate / ID 不当数值"]
+    ENC_FIT --> ENC_DETAIL["identity-preserving：键/中等基数 one-hot<br/>数值(单位感知)+is_null<br/>超高基数 surrogate；逐列目标头规格"]
 
     ENC_DETAIL --> TRANS["transform 全量 + 干净子集"]
-    TRANS --> TRAIN["模型训练 model.py（混合头）<br/>DAE 单元格级 + GANomaly 行级<br/>仅 x_clean 训练"]
+    TRANS --> TRAIN["ConditionalPredictor 训练 model.py<br/>masked-column：屏蔽一列用其余列预测它<br/>仅 x_clean 训练"]
 
-    TRAIN --> SCORE["全量打分"]
-    SCORE --> CONTRIB["column_contributions<br/>→ robust_normalize 按列 MAD z"]
-    SCORE --> ROW_SC["anomaly_score 行级分"]
+    TRAIN --> SCORE["全量逐列预测 predict()"]
+    SCORE --> CELLSCORE["逐格分数<br/>类别 -log P(观测) / 数值残差 / surrogate MSE"]
 
-    CONTRIB --> CELL["DAE 通道: 逐列阈值 + 每行 top-N<br/>→ subtype=cell"]
-    ROW_SC --> ROW["GANomaly 通道: 行分位阈值<br/>+ 行内 top-k 列 → subtype=row"]
-
-    CELL --> FUSE["_fuse 按(row_id,column)融合<br/>cell 优先"]
-    ROW --> FUSE
-    FUSE --> S2CSV["stage2_candidates.csv"]
+    CELLSCORE --> GATE["双闸门：逐列干净分位阈值<br/>+ margin 精度闸门 + 可预测性闸门"]
+    GATE --> S2CSV["stage2_candidates.csv<br/>含 suggested_fix"]
     S2CSV --> MERGE["merge_candidates<br/>(row_id,column) 去重<br/>Stage1 优先"]
     MERGE --> COMB["combined_candidates.csv<br/>+ source: stage1/stage2"]
 ```
@@ -343,32 +337,34 @@ flowchart TD
 ### Stage 2 设计要点
 
 1. **训练数据净化**：只用 `clean_mask` 中整行干净的行训练，避免把错误学进分布
-2. **推断覆盖全量**：打分时对全部行（含脏行）计算，以发现规则层漏报
-3. **编码是主瓶颈**：`__UNK__`/单位数值/`is_null`/高基数 surrogate/ID 启发式使被丢弃或误编码的列重新可检
-4. **角色分工**：DAE 单元格级（类别/缺失/拼写），GANomaly 行级/多列联合，融合后送 Stage 3
-5. **按列鲁棒归一化**：逐列误差经干净集 MAD z-score 标准化，使每行 top-N 选择跨列可比
-6. **召回/精度杠杆**：`quantile` / `max_cells_per_row`，FP 交 Stage 3 过滤
+2. **推断覆盖全量**：对全部行（含脏行）打分，以发现规则层漏报
+3. **身份保留编码**：键列（`flight`）/中等基数列（时刻）以 one-hot 身份进入并作类别目标，是学到 `P(time|flight)` 共识的前提
+4. **统一机制**：条件预测 `P(列|其余列)` 同时覆盖分布异常与键->值冲突，无需按数据集路由
+5. **双闸门控精度**：`margin`（备选类显著更优才报）+ `min_predictability`（难预测的标识列跳过）
+6. **召回/精度杠杆**：`quantile` / `margin` / `max_cells_per_row`，FP 交 Stage 3 过滤
 
 ### Stage 2 关键模块
 
 | 文件 | 职责 |
 |------|------|
-| `encoding.py` | 表格 → 数值张量（混合 role + 列切片），UNK/单位数值/surrogate/ID |
-| `model.py` | DAE 单元格级 / GANomaly 行级（混合头、feature-matching、稳定化） |
-| `score.py` | 按列鲁棒归一化、DAE/GANomaly 双通道、融合 `run_stage2` |
+| `encoding.py` | 表格 → 数值张量；identity-preserving 输入 + 逐列目标头规格（`ColumnSpec`） |
+| `model.py` | `ConditionalPredictor`：masked-column 训练的共享编码器 + 逐列预测头 |
+| `score.py` | 逐格似然/残差 + 干净分位阈值 + margin / 可预测性闸门，`run_stage2` |
 | `io_utils.py` | 表格/掩码读取、`merge_candidates` |
 
-### Stage 2 实测结论（hospital 数据集）
+### Stage 2 实测结论（同一套默认参数，无数据集特判）
 
-| 层 | 检出 | P | R | F1 |
-| --- | --- | --- | --- | --- |
-| 旧版 Stage 2 DIST | 164 | 0.713 | 0.143 | 0.238 |
-| **新版 Stage 2 DIST (fuse)** | 536 | **0.726** | **0.474** | **0.574** |
-| Stage 1 规则层 | 719 | 0.972 | 0.852 | 0.908 |
-| 合并 S1∪S2 | 885 | 0.811 | **0.876** | 0.842 |
+| 数据集 | 层 | 检出 | P | R | F1 |
+| --- | --- | --- | --- | --- | --- |
+| flights | Stage 1 规则层 | 2673 | 0.999 | 0.542 | 0.703 |
+| flights | Stage 2 DIST | 264 | 0.871 | 0.047 | 0.089 |
+| flights | **合并 S1∪S2** | 2764 | **0.986** | **0.554** | **0.710** |
+| hospital | Stage 1 规则层 | 749 | 0.961 | 0.878 | 0.918 |
+| hospital | Stage 2 DIST | 570 | 0.686 | 0.477 | 0.563 |
+| hospital | **合并 S1∪S2** | 904 | **0.802** | **0.884** | **0.841** |
 
-- **编码修复带来主要增益**：DIST 召回 0.143 → 0.474（同等精度），DIST F1 ×2.4
-- **DAE > GANomaly（小表）**：GANomaly 相对 DAE 独有真阳极少；架构已改造正确，定位大表场景
+- **flights**：旧 DAE/GANomaly 使合并精度从 0.999 崩到 0.814；统一模型把键->值冲突找回（`sched_dep_time` 召回 0.97），合并精度回到 **0.986**、F1 **0.710** 反超 Stage 1。
+- **hospital**：与旧设计基本持平（合并 F1 0.841，召回略升），分布型检测能力未退化。
 
 ---
 
@@ -494,9 +490,9 @@ flowchart LR
     O1["① LLM 规则 prompt<br/>+ guard + violation_rate"] -->|降 Stage1 误报| P1
     O2["② Typo 阈值<br/>anchor_ratio / distance"] -->|提 T 召回| P1
     O3["③ FD 门槛<br/>pure_group_ratio 等"] -->|控 VAD 误报| P1
-    O4["④ 编码器<br/>数值/百分比列"] -->|提 DIST 召回| P2
-    O5["⑤ quantile + top-N"] -->|DIST 精度/召回权衡| P2
-    O6["⑥ DAE vs GANomaly"] -->|小表优先 DAE| P2
+    O4["④ 编码器<br/>身份保留 / 基数上限"] -->|提 DIST 召回| P2
+    O5["⑤ quantile + margin"] -->|DIST 精度/召回权衡| P2
+    O6["⑥ min_predictability"] -->|跳过标识列控误报| P2
     O7["⑦ Stage3 prompt<br/>跨列一致性规则"] -->|化解 DIST 误报| P3
     O8["⑧ 缓存策略<br/>.rule_cache / .stage3_cache"] -->|降 LLM 成本| COST
 
@@ -511,8 +507,8 @@ flowchart LR
 | MV 可空推断 | `is_nullable_column`, `nullable_columns` | 减少 MV 误报 |
 | Typo 召回 | `typo_detect.py`, `config typo.*` | 自由文本列拼写 |
 | FD 精度 | `fd_detect.py`, `execution.fd.*` | 软相关 vs 真依赖 |
-| 分布层编码 | `encoding.py` | 数值离群、联合异常 |
-| DIST 阈值 | `score.py` `quantile`, `max_cells_per_row` | 合并 F1 关键杠杆 |
+| 条件层编码 | `encoding.py` `max_cardinality` | 身份保留、键->值冲突可检 |
+| DIST 阈值 | `score.py` `quantile`, `margin`, `min_predictability` | 合并 F1 关键杠杆 |
 | LLM 精检成本 | `stage_3/cache.py`, `--limit` | 按行分组，一次 LLM 处理多格 |
 | 精检质量 | `prompt.py` 跨列原则 | Stateavg 等派生列误报 |
 

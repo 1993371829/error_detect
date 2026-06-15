@@ -1,19 +1,17 @@
 """
-Stage 2 包：GAN 分布异常检测层（Layer 2）。
+Stage 2 包：无监督异常检测层（Layer 2），统一条件预测模型。
 
-承接 Stage 1 的规则层输出，在"干净子集"上学习表格的联合分布，
-对每一行给出异常分，并把异常分摊到各列（逐列重构误差贡献），
-用于捕获规则层抓不到的:
-    - 跨列依赖违反（VAD，如 city-state-zip 不匹配）
-    - 数值离群 / 分布异常
-
-主线模型: 重构式 GAN（GANomaly 风格）。
-对照基线: 去噪自编码器（DAE）。
+承接 Stage 1 的规则层输出，在"干净子集"上学习每一列的条件分布
+P(列 | 其余列)。一个单元格的取值若难以由同一行其余列预测出来，则可疑。
+该单一机制同时覆盖:
+    - 分布型异常（拼写 / 未知类别 / 数值越界）：行上下文给出低条件概率。
+    - 键 -> 值冲突 / 真值发现（如某来源把航班时刻写错）：P(time|flight)
+      集中在该航班的共识取值，偏离者得到低概率。
 
 模块概览:
-    encoding.py  : 表格 -> 张量编码（数值归一化 + 类别编码）
-    model.py     : GANomaly / DAE 骨架
-    score.py     : 行级异常分 + 逐列贡献 + 无监督阈值
+    encoding.py  : 表格 -> 张量编码（identity-preserving 输入 + 逐列目标头规格）
+    model.py     : ConditionalPredictor（masked-column 训练的共享编码器 + 逐列头）
+    score.py     : 逐格似然 / 残差 + 干净分位阈值 + 精度闸门 + suggested_fix
 
 详见 stage_2/DESIGN.md。
 """

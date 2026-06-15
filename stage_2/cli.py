@@ -1,50 +1,41 @@
 """
-Stage 2 命令行入口：分布异常检测（DAE 单元格级 + GANomaly 行级，默认融合）。
+Stage 2 命令行入口：统一条件预测模型的分布/冲突异常检测。
+
+一个模型同时覆盖两类错误（无需按数据集路由）:
+    - 分布型异常（拼写/未知类别/越界）：行上下文给出低条件概率。
+    - 键->值冲突 / 真值发现（如某来源把航班时刻写错）：P(time|flight) 集中在共识取值，
+      偏离者得到低概率。
 
 前置条件:
     pip install -r requirements.txt
     pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
-    先完成 Stage 1，确保项目根目录存在 clean_mask.csv 与 data/hospital_errors.csv
+    先完成 Stage 1，确保存在 clean_mask.csv 与 Stage 1 错误 CSV。
 
 运行命令（在项目根目录 d:\\study\\error_dect 下执行）:
 
-    # hospital 全流程 — Stage 2（默认 fuse：DAE + GANomaly 融合）
+    # hospital 全流程 — Stage 2
     python -m stage_2.cli
 
-    # 仅 DAE 单元格级（更快）
-    python -m stage_2.cli --mode dae
+    # flights
+    python -m stage_2.cli --input data/flights_dirty.csv \
+        --clean-mask clean_mask.csv \
+        --stage1-errors data/flights_errors.csv \
+        --candidates-out data/flights_stage2_candidates.csv \
+        --combined-out data/flights_combined_candidates.csv
 
-    # 仅 GANomaly 行级
-    python -m stage_2.cli --mode ganomaly
-
-    # 调阈值：偏召回（误报交 Stage 3 过滤）
-    python -m stage_2.cli --quantile 0.98 --max-cells-per-row 2
-
-    # 调阈值：偏精度
-    python -m stage_2.cli --quantile 0.995 --max-cells-per-row 1
+    # 调阈值：偏召回（误报交 Stage 3 过滤） / 偏精度
+    python -m stage_2.cli --quantile 0.98
+    python -m stage_2.cli --quantile 0.995 --margin 0.1
 
     # 调试：缩短训练轮数
-    python -m stage_2.cli --epochs 50
-
-    # 显式指定输入/输出路径
-    python -m stage_2.cli --input data/hospital_dirty.csv --clean-mask clean_mask.csv --stage1-errors data/hospital_errors.csv --candidates-out data/stage2_candidates.csv --combined-out data/combined_candidates.csv
-
-评估（需 data/hospital_clean.csv）:
-    python -m stage_2.evaluate
-    python -m stage_2.evaluate --by-column --dae-candidates data/stage2_dae.csv --ganomaly-candidates data/stage2_ganomaly.csv
+    python -m stage_2.cli --epochs 40
 
 产出:
-    data/stage2_candidates.csv   融合后的 DIST 候选
-    data/stage2_dae.csv            DAE 单独候选
-    data/stage2_ganomaly.csv       GANomaly 单独候选
+    data/stage2_candidates.csv     Stage 2 DIST 候选（含 suggested_fix）
     data/combined_candidates.csv   Stage1 ∪ Stage2 合并（Stage 3 输入）
 
 下一步:
     python -m stage_3.cli
-
-流程:
-    读 dirty + clean_mask -> 编码(仅干净单元格估参) -> 干净行训练 ->
-    全量打分(DAE 逐列 / GANomaly 行级) -> 融合 DIST 候选 -> 与 Stage1 合并去重。
 """
 
 from __future__ import annotations
@@ -59,27 +50,27 @@ from stage_2.score import run_stage2
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Stage 2: distribution anomaly detection")
-    parser.add_argument("--mode", choices=["fuse", "dae", "ganomaly"], default=None,
-                        help="检测模式：fuse=DAE+GANomaly 融合 / dae / ganomaly")
+    parser = argparse.ArgumentParser(description="Stage 2: conditional-prediction anomaly detection")
     parser.add_argument("--input", default=None, help="待检测脏表 CSV")
     parser.add_argument("--clean-mask", default=None, help="Stage 1 干净单元格掩码 CSV")
     parser.add_argument("--stage1-errors", default=None, help="Stage 1 错误结果 CSV")
-    parser.add_argument("--candidates-out", default=None, help="Stage 2 融合 DIST 候选输出")
+    parser.add_argument("--candidates-out", default=None, help="Stage 2 DIST 候选输出")
     parser.add_argument("--combined-out", default=None, help="合并候选输出（Stage3 输入）")
-    parser.add_argument("--quantile", type=float, default=None, help="DAE 逐列阈值分位数")
+    parser.add_argument("--quantile", type=float, default=None, help="逐列干净分位阈值")
+    parser.add_argument("--margin", type=float, default=None,
+                        help="类别精度闸门：备选类概率需超观测类至少该值才报")
+    parser.add_argument("--min-predictability", type=float, default=None,
+                        help="类别列在干净集上的最低 top-1 可预测性，低于则跳过该列")
     parser.add_argument("--max-cells-per-row", type=int, default=None,
-                        help="DAE 每行最多保留 top-N 高贡献单元格（0=不限）")
-    parser.add_argument("--row-quantile", type=float, default=None, help="GANomaly 行级阈值分位数")
-    parser.add_argument("--row-top-k", type=int, default=None, help="GANomaly 可疑行内取 top-k 列")
-    parser.add_argument("--epochs", type=int, default=None, help="训练轮数（同时作用于两模型）")
+                        help="每行最多保留 top-N 高分单元格（0=不限）")
+    parser.add_argument("--max-cardinality", type=int, default=None,
+                        help="类别列 one-hot 身份上限（超过走 surrogate）")
+    parser.add_argument("--epochs", type=int, default=None, help="训练轮数")
     return parser
 
 
 def _resolve_config(args: argparse.Namespace) -> Stage2Config:
     cfg = Stage2Config()
-    if args.mode:
-        cfg.mode = args.mode
     if args.input:
         cfg.paths.input_csv = args.input
     if args.clean_mask:
@@ -92,15 +83,16 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.paths.combined_out = args.combined_out
     if args.quantile is not None:
         cfg.scoring.quantile = args.quantile
+    if args.margin is not None:
+        cfg.scoring.margin = args.margin
+    if args.min_predictability is not None:
+        cfg.scoring.min_predictability = args.min_predictability
     if args.max_cells_per_row is not None:
         cfg.scoring.max_cells_per_row = args.max_cells_per_row
-    if args.row_quantile is not None:
-        cfg.scoring.row_quantile = args.row_quantile
-    if args.row_top_k is not None:
-        cfg.scoring.row_top_k = args.row_top_k
+    if args.max_cardinality is not None:
+        cfg.encoding.max_cardinality = args.max_cardinality
     if args.epochs is not None:
-        cfg.dae.epochs = args.epochs
-        cfg.ganomaly.epochs = args.epochs
+        cfg.model.epochs = args.epochs
     return cfg
 
 
@@ -121,20 +113,19 @@ def main(argv: list[str] | None = None) -> None:
     print(f"干净掩码: {int(clean_mask.values.sum())}/{clean_mask.size} 单元格干净, "
           f"{row_clean} 行整行干净（用于训练）")
 
-    dae = build_model("dae", **cfg.dae_kwargs()) if cfg.mode in ("dae", "fuse") else None
-    ganomaly = build_model("ganomaly", **cfg.ganomaly_kwargs()) if cfg.mode in ("ganomaly", "fuse") else None
-    print(f"模式: {cfg.mode} | 训练中...")
+    model = build_model(**cfg.model_kwargs())
+    print("统一条件预测模型 训练中...")
 
-    candidates, parts = run_stage2(
+    candidates, _ = run_stage2(
         df, clean_mask,
-        dae=dae, ganomaly=ganomaly, mode=cfg.mode,
+        model=model,
         max_cardinality=cfg.encoding.max_cardinality,
         n_hash=cfg.encoding.n_hash,
+        target_max_card=cfg.encoding.target_max_card,
         quantile=cfg.scoring.quantile,
+        margin=cfg.scoring.margin,
+        min_predictability=cfg.scoring.min_predictability,
         max_cells_per_row=cfg.scoring.max_cells_per_row,
-        row_quantile=cfg.scoring.row_quantile,
-        row_top_k=cfg.scoring.row_top_k,
-        row_min_col_z=cfg.scoring.row_min_col_z,
     )
 
     out = Path(cfg.paths.candidates_out)
@@ -146,12 +137,6 @@ def main(argv: list[str] | None = None) -> None:
             print("通道分布:", dict(candidates["subtype"].value_counts()))
         print("列分布:")
         print(candidates["column"].value_counts().to_string())
-
-    # 各模型单独候选（供三方对比与调试）
-    if "dae" in parts and parts["dae"] is not None and not parts["dae"].empty:
-        parts["dae"].to_csv(Path(cfg.paths.dae_out), index=False)
-    if "ganomaly" in parts and parts["ganomaly"] is not None and not parts["ganomaly"].empty:
-        parts["ganomaly"].to_csv(Path(cfg.paths.ganomaly_out), index=False)
 
     # 与 Stage 1 合并
     s1_path = Path(cfg.paths.stage1_errors)

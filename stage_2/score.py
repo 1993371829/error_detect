@@ -1,16 +1,18 @@
 """
-Stage 2 打分与输出：把模型的逐特征误差还原成"逐列贡献"，按无监督阈值
+Stage 2 打分与输出：基于统一条件预测模型的逐格似然/残差，按无监督阈值
 筛出可疑单元格，产出可并入 Stage 1 / 送往 Stage 3 的候选错误。
 
-角色分工:
-    - DAE 走"单元格级"通道：逐列误差经按列鲁棒归一化后，逐列分位阈值 + 每行 top-N，
-      产出 subtype=cell 候选（类别/缺失/拼写）。
-    - GANomaly 走"行级"通道：行异常分超过干净分位阈值即判为可疑行，行内按归一化逐列
-      贡献取 top-k 列粗定位，产出 subtype=row 候选（多列联合异常）。
-    - 两路候选按 (row_id, column) 融合（cell 优先），error_type 统一为 DIST。
+打分逻辑（见 stage_2/DESIGN.md）:
+    - 类别列：score = -log P(观测值 | 其余列)。观测值得到的条件概率越低越可疑。
+      额外"精度闸门 margin"：仅当模型更偏好的另一取值概率显著高于观测值时才报，
+      该 argmax 取值即 suggested_fix。
+    - 数值列：score = |预测 - 观测| 的标准化残差。
+    - 超高基数文本：score = 形态特征重构 MSE（兜底）。
+    每列阈值取"干净单元格"上分数分布的高分位（quantile），无监督、按列自适应。
 
 输出 schema:
-    row_id, column, value, error_type(=DIST), anomaly_score, col_contribution, subtype
+    row_id, column, value, error_type(=DIST), anomaly_score, col_contribution,
+    suggested_fix, subtype
 """
 
 from __future__ import annotations
@@ -20,75 +22,147 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from stage_2.encoding import TabularEncoder
-from stage_2.model import BaseAnomalyModel
+from stage_2.encoding import TabularEncoder, ColumnSpec
+from stage_2.model import ConditionalPredictor
+
+_EPS = 1e-9
 
 
-def column_contributions(
-    model: BaseAnomalyModel,
-    encoder: TabularEncoder,
-    x: np.ndarray,
-) -> pd.DataFrame:
-    """每行每列的重构误差贡献（逐列求和的原始误差）。"""
-    per_feature = model.per_feature_error(x)
-    col_errors = encoder.aggregate_feature_errors(per_feature)
-    return pd.DataFrame(col_errors)
+def _clean_column_mask(clean_mask: pd.DataFrame, col: str, n: int) -> np.ndarray:
+    """取某列的干净单元格布尔掩码（缺列则全 True）。"""
+    if col in clean_mask.columns:
+        return clean_mask[col].astype(bool).to_numpy()
+    return np.ones(n, dtype=bool)
 
 
-def robust_normalize(contrib: pd.DataFrame, row_clean: np.ndarray) -> pd.DataFrame:
+def _score_column(
+    spec: ColumnSpec,
+    x_all: np.ndarray,
+    pred,
+    df: pd.DataFrame,
+) -> Optional[dict]:
     """
-    按列鲁棒归一化（中位数/MAD），消除宽类别列与数值列之间的量纲差异，
-    使逐列贡献可跨列比较（直接影响每行 top-N 选择的正确性）。
+    计算单列逐行分数及其辅助量。
+
+    Returns dict(scores, valid, blank, suggested_fix(list[str]), pred_differs(bool array))
+    或 None（该列不可打分）。
     """
-    out = pd.DataFrame(index=contrib.index)
-    for col in contrib.columns:
-        v = contrib[col].to_numpy(dtype=np.float64)
-        clean_v = v[row_clean]
-        med = float(np.median(clean_v)) if len(clean_v) else float(np.median(v))
-        mad = float(np.median(np.abs(clean_v - med))) or 1.0
-        out[col] = (v - med) / (1.4826 * mad)
-    return out
+    n = x_all.shape[0]
+    if spec.target_kind == "categorical":
+        onehot = x_all[:, spec.start:spec.start + spec.onehot_dim]
+        obs_idx = onehot.argmax(axis=1)
+        probs = np.asarray(pred)
+        rows = np.arange(n)
+        p_obs = probs[rows, obs_idx]
+        pred_idx = probs.argmax(axis=1)
+        p_pred = probs[rows, pred_idx]
+        scores = -np.log(p_obs + _EPS)
+        margin = p_pred - p_obs
+        blank = x_all[:, spec.isnull_index] >= 0.5
+        valid = ~blank
+        # suggested_fix：模型最偏好的类别（UNK 则留空）
+        fixes = [
+            (spec.classes[k] if k < spec.unk_index else "")
+            for k in pred_idx
+        ]
+        return {
+            "scores": scores, "valid": valid, "blank": blank,
+            "suggested_fix": fixes, "margin": margin,
+            "pred_differs": pred_idx != obs_idx,
+        }
 
+    if spec.target_kind == "numeric":
+        obs = x_all[:, spec.value_index]
+        pred_v = np.asarray(pred)
+        blank = x_all[:, spec.isnull_index] >= 0.5
+        valid = ~blank
+        scores = np.abs(pred_v - obs)
+        fixes = [f"{(v * spec.iqr + spec.median):.6g}" for v in pred_v]
+        return {
+            "scores": scores, "valid": valid, "blank": blank,
+            "suggested_fix": fixes, "margin": None,
+            "pred_differs": np.ones(n, dtype=bool),
+        }
 
-def column_thresholds(
-    clean_contrib: pd.DataFrame,
-    quantile: float = 0.99,
-) -> dict[str, float]:
-    """基于干净子集的逐列（归一化）误差分布，取高分位作为每列阈值。"""
-    return {col: float(clean_contrib[col].quantile(quantile)) for col in clean_contrib.columns}
+    if spec.target_kind == "surrogate":
+        obs = x_all[:, spec.start:spec.start + spec.surrogate_dim]
+        pred_v = np.asarray(pred)
+        blank = x_all[:, spec.isnull_index] >= 0.5
+        valid = ~blank
+        scores = np.abs(pred_v - obs).mean(axis=1)
+        return {
+            "scores": scores, "valid": valid, "blank": blank,
+            "suggested_fix": [""] * n, "margin": None,
+            "pred_differs": np.ones(n, dtype=bool),
+        }
+    return None
 
 
 def flag_suspicious_cells(
     df: pd.DataFrame,
-    contrib: pd.DataFrame,
-    thresholds: dict[str, float],
-    row_scores: Optional[np.ndarray] = None,
+    specs: list[ColumnSpec],
+    x_all: np.ndarray,
+    preds: dict,
+    clean_mask: pd.DataFrame,
+    *,
+    quantile: float = 0.99,
+    margin: float = 0.0,
+    min_predictability: float = 0.5,
+    min_clean: int = 20,
     max_cells_per_row: int = 0,
-    subtype: str = "cell",
 ) -> pd.DataFrame:
-    """依据逐列阈值标记可疑单元格（DAE 单元格级通道）。"""
+    """对每列计算分数并按干净分位阈值 + 精度闸门筛出可疑单元格。"""
+    n = len(df)
     records: list[dict] = []
-    for col in contrib.columns:
-        thr = thresholds.get(col)
-        if thr is None:
+    for spec in specs:
+        if spec.target_kind == "none":
             continue
-        col_err = contrib[col].to_numpy()
-        for pos, err in enumerate(col_err):
-            if err <= thr:
+        info = _score_column(spec, x_all, preds.get(spec.name), df)
+        if info is None:
+            continue
+        scores = info["scores"]
+        valid = info["valid"]
+        col_clean = _clean_column_mask(clean_mask, spec.name, n)
+
+        # 阈值样本：干净且有效（非空）的单元格；不足则退化为全体有效格
+        thr_mask = col_clean & valid
+        if int(thr_mask.sum()) < min_clean:
+            thr_mask = valid
+        if int(thr_mask.sum()) == 0:
+            continue
+
+        # 可预测性闸门（通用、无监督）：类别列若在干净集上本就难以由其余列预测
+        # （如 src / flight 这类标识列），则其条件概率不可靠，跳过以免刷误报。
+        if spec.target_kind == "categorical":
+            predictability = float((~info["pred_differs"])[thr_mask].mean())
+            if predictability < min_predictability:
                 continue
+
+        thr = float(np.quantile(scores[thr_mask], quantile))
+
+        flag = valid & (scores > thr) & info["pred_differs"]
+        if info["margin"] is not None:
+            flag = flag & (info["margin"] >= margin)
+
+        for pos in np.where(flag)[0]:
             records.append({
                 "row_id": df.index[pos],
-                "column": col,
-                "value": df.iloc[pos][col],
+                "column": spec.name,
+                "value": df.iloc[pos][spec.name],
                 "error_type": "DIST",
-                "anomaly_score": float(row_scores[pos]) if row_scores is not None else float(err),
-                "col_contribution": float(err),
-                "subtype": subtype,
+                "anomaly_score": float(scores[pos]),
+                "col_contribution": float(scores[pos]),
+                "suggested_fix": info["suggested_fix"][pos],
+                "subtype": spec.target_kind,
             })
-    result = pd.DataFrame(records)
+
+    result = pd.DataFrame(records, columns=[
+        "row_id", "column", "value", "error_type",
+        "anomaly_score", "col_contribution", "suggested_fix", "subtype",
+    ])
     if max_cells_per_row and not result.empty:
         result = (
-            result.sort_values("col_contribution", ascending=False)
+            result.sort_values("anomaly_score", ascending=False)
             .groupby("row_id", group_keys=False)
             .head(max_cells_per_row)
             .reset_index(drop=True)
@@ -96,108 +170,43 @@ def flag_suspicious_cells(
     return result
 
 
-def flag_suspicious_rows(
-    df: pd.DataFrame,
-    contrib_norm: pd.DataFrame,
-    row_scores: np.ndarray,
-    row_clean: np.ndarray,
-    row_quantile: float = 0.99,
-    top_k_cols: int = 3,
-    min_col_z: float = 0.0,
-    subtype: str = "row",
-) -> pd.DataFrame:
-    """
-    行级异常通道（GANomaly）：行异常分超过干净分位阈值的行判为可疑，
-    行内按归一化逐列贡献取 top-k 列做粗定位。
-    """
-    clean_scores = row_scores[row_clean]
-    thr = float(np.quantile(clean_scores, row_quantile)) if len(clean_scores) else float("inf")
-    records: list[dict] = []
-    cols = list(contrib_norm.columns)
-    for pos in np.where(row_scores > thr)[0]:
-        row_vals = contrib_norm.iloc[pos]
-        ranked = row_vals.sort_values(ascending=False)
-        for col in ranked.index[:top_k_cols]:
-            if float(ranked[col]) < min_col_z:
-                continue
-            records.append({
-                "row_id": df.index[pos],
-                "column": col,
-                "value": df.iloc[pos][col],
-                "error_type": "DIST",
-                "anomaly_score": float(row_scores[pos]),
-                "col_contribution": float(ranked[col]),
-                "subtype": subtype,
-            })
-    return pd.DataFrame(records)
-
-
-def _fuse(parts: list[pd.DataFrame]) -> pd.DataFrame:
-    """按 (row_id, column) 融合多路候选，cell 优先（列表中靠前者优先）。"""
-    parts = [p for p in parts if p is not None and not p.empty]
-    if not parts:
-        return pd.DataFrame(columns=[
-            "row_id", "column", "value", "error_type",
-            "anomaly_score", "col_contribution", "subtype",
-        ])
-    combined = pd.concat(parts, ignore_index=True)
-    combined = combined.drop_duplicates(subset=["row_id", "column"], keep="first").reset_index(drop=True)
-    return combined
-
-
 def run_stage2(
     df: pd.DataFrame,
     clean_mask: pd.DataFrame,
     *,
-    dae: Optional[BaseAnomalyModel] = None,
-    ganomaly: Optional[BaseAnomalyModel] = None,
-    mode: str = "fuse",
-    max_cardinality: int = 50,
+    model: Optional[ConditionalPredictor] = None,
+    max_cardinality: int = 500,
     n_hash: int = 16,
-    quantile: float = 0.995,
-    max_cells_per_row: int = 1,
-    row_quantile: float = 0.99,
-    row_top_k: int = 3,
-    row_min_col_z: float = 0.0,
+    target_max_card: Optional[int] = None,
+    quantile: float = 0.99,
+    margin: float = 0.0,
+    min_predictability: float = 0.5,
+    max_cells_per_row: int = 0,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """
-    Stage 2 端到端：编码 -> 仅干净行训练 -> 全量打分 -> 融合候选。
+    Stage 2 端到端：编码 -> 仅干净行训练统一条件预测模型 -> 全量逐格打分 -> 候选。
 
     Returns:
-        (combined_candidates, {"dae": ..., "ganomaly": ...})
+        (candidates, {"model": candidates})
     """
-    encoder = TabularEncoder(max_cardinality=max_cardinality, n_hash=n_hash)
+    encoder = TabularEncoder(
+        max_cardinality=max_cardinality, n_hash=n_hash, target_max_card=target_max_card
+    )
     encoder.fit(df, clean_mask=clean_mask)
-    spec = encoder.feature_spec()
+    specs = encoder.column_specs()
 
     row_clean = clean_mask.all(axis=1).to_numpy()
     x_all = encoder.transform(df)
     x_clean = x_all[row_clean]
 
-    parts: dict[str, pd.DataFrame] = {}
+    if model is None:
+        model = ConditionalPredictor()
+    model.fit(x_clean, specs)
+    preds = model.predict(x_all)
 
-    if mode in ("dae", "fuse") and dae is not None:
-        dae.fit(x_clean, feature_spec=spec)
-        contrib = column_contributions(dae, encoder, x_all)
-        contrib_norm = robust_normalize(contrib, row_clean)
-        thresholds = column_thresholds(contrib_norm[row_clean], quantile=quantile)
-        row_scores = dae.anomaly_score(x_all)
-        parts["dae"] = flag_suspicious_cells(
-            df, contrib_norm, thresholds,
-            row_scores=row_scores, max_cells_per_row=max_cells_per_row, subtype="cell",
-        )
-
-    if mode in ("ganomaly", "fuse") and ganomaly is not None:
-        ganomaly.fit(x_clean, feature_spec=spec)
-        contrib = column_contributions(ganomaly, encoder, x_all)
-        contrib_norm = robust_normalize(contrib, row_clean)
-        row_scores = ganomaly.anomaly_score(x_all)
-        parts["ganomaly"] = flag_suspicious_rows(
-            df, contrib_norm, row_scores, row_clean,
-            row_quantile=row_quantile, top_k_cols=row_top_k,
-            min_col_z=row_min_col_z, subtype="row",
-        )
-
-    # 融合：cell 优先于 row
-    combined = _fuse([parts.get("dae"), parts.get("ganomaly")])
-    return combined, parts
+    candidates = flag_suspicious_cells(
+        df, specs, x_all, preds, clean_mask,
+        quantile=quantile, margin=margin,
+        min_predictability=min_predictability, max_cells_per_row=max_cells_per_row,
+    )
+    return candidates, {"model": candidates}

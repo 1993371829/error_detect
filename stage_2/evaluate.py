@@ -2,11 +2,9 @@
 Stage 2 评估：以 clean vs dirty 的逐单元格差异为 ground truth，
 报告 DIST 候选与 "Stage1 ∪ Stage2" 合并集的 precision / recall / F1。
 
-增强（角色分工优化配套）:
-    - 逐列召回明细：定位哪些列被召回 / 漏报，指导编码与模型调参。
-    - 数值列 / 类别列分组的 P/R/F1：分别观察 DAE(类别/缺失/拼写) 与
-      GANomaly(行级/多列联合) 的强项是否落在预期列类型上。
-    - DAE / GANomaly / 融合 三方候选对比（若对应 CSV 存在）。
+增强:
+    - 逐列召回明细：定位哪些列被召回 / 漏报，指导编码与模型/阈值调参。
+    - 数值列 / 类别列分组的 P/R/F1。
 
 用法:
     python -m stage_2.evaluate
@@ -125,10 +123,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--candidates", default=cfg.paths.candidates_out)
     parser.add_argument("--combined", default=cfg.paths.combined_out)
     parser.add_argument("--stage1-errors", default=cfg.paths.stage1_errors)
-    parser.add_argument("--dae-candidates", default=None,
-                        help="DAE 单独候选 CSV（三方对比用）")
-    parser.add_argument("--ganomaly-candidates", default=None,
-                        help="GANomaly 单独候选 CSV（三方对比用）")
     parser.add_argument("--by-column", action="store_true",
                         help="额外打印融合/DIST 候选的逐列召回明细")
     args = parser.parse_args(argv)
@@ -151,14 +145,6 @@ def main(argv: list[str] | None = None) -> None:
         dist = cells_from(read_table(args.candidates))
         _report("Stage2(DIST)", dist, gt)
         _report_grouped("Stage2(DIST)", dist, gt, kinds)
-
-    # 三方对比：DAE / GANomaly 单独候选
-    for label, path in (("DAE", args.dae_candidates),
-                        ("GANomaly", args.ganomaly_candidates)):
-        if path and Path(path).exists():
-            cells = cells_from(read_table(path))
-            _report(f"  {label}", cells, gt)
-            _report_grouped(label, cells, gt, kinds)
 
     comb = None
     if Path(args.combined).exists():
