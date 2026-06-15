@@ -1,0 +1,56 @@
+# Stage 1 全局默认配置
+# 优先级: CLI 参数 > 环境变量 > 本文件 > 代码默认值
+
+# LLM 配置（OpenAI 兼容接口，可通过 base_url 切换服务商）
+llm:
+  api_key: null                    # 优先从环境变量 LLM_API_KEY 读取
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  temperature: 0                   # 规则归纳需要稳定输出
+
+# 数据画像参数
+profiling:
+  max_samples: 20                  # 每列最多保留的样例值数量
+
+# 规则执行参数
+execution:
+  max_violation_rate: 0.3          # 误报控制：违反率超过 30% 的规则会被丢弃
+  nullable_columns: []             # 显式跳过 MV 扫描的列名列表
+  infer_nullable: false            # 根据 LLM 无 not_null + 高空值率推断可空列（默认关闭）
+  infer_nullable_min_rate: 0.5     # infer_nullable 生效时的空值率下限
+  guard:
+    enabled: true
+    top5_coverage_structured_min: 0.5
+    distinct_pattern_structured_max: 30
+    dominant_pattern_rate_min: 0.7
+  # Typo 候选检测（频次 + 编辑距离），用于发现文本/类别列拼写错误（T）
+  typo:
+    enabled: true
+    max_unique: 300                # 列唯一值超过此数视为高基数 id，跳过
+    min_anchor_count: 3            # 锚点(正确形态)的最小出现次数
+    rare_max_count: 2              # 候选(疑似 typo)的最大出现次数
+    anchor_ratio_min: 5.0          # 锚点频次 / 候选频次 的最小比值
+    max_abs_distance: 2            # 最大编辑距离
+    max_norm_distance: 0.34        # 编辑距离 / 锚点长度 的上限
+    min_anchor_len: 2              # 锚点最小长度
+    skip_numeric: true             # 跳过数值列（typo 由 FI/VAD 覆盖）
+    numeric_min_ratio: 0.8         # 判定数值列的可解析比例
+  # 近似函数依赖挖掘，用于发现跨列依赖违反（VAD）
+  fd:
+    enabled: true
+    min_confidence: 0.9            # FD 全局一致率下限
+    min_group_support: 5           # 参与违反判定的 A 组最小样本量
+    min_group_confidence: 0.9      # A 组内主导值占比下限
+    pure_threshold: 0.9            # "纯组"的主导占比门槛
+    min_pure_group_ratio: 0.85     # 纯组比例下限（区分真依赖 vs 软相关）
+    min_distinct_dependents: 2     # 不同主导值数下限（防类别不平衡假依赖）
+    max_determinant_unique_ratio: 0.5  # 决定列唯一率上限（过高跳过）
+    min_dependent_unique: 2        # 依赖列最少唯一值
+
+# 输入输出路径
+paths:
+  rule_cache: ".rule_cache.json"   # LLM 规则缓存
+  rules_output: "rules.json"       # 归纳后的规则报告
+  errors_output: "errors.csv"      # 检测到的错误单元格
+  profiles_output: "profiles.json" # 列画像输出
+  clean_mask_output: "clean_mask.csv"  # 干净单元格掩码（供 Stage 2 训练）

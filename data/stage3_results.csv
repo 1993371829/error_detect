@@ -1,0 +1,1214 @@
+row_id,column,value,prior_error_type,prior_source,is_error,error_type,confidence,suggested_fix,llm_reason
+0,Score,empty,MV,stage1,True,MV,0.98,,值为缺失哨兵'empty'
+0,Sample,empty,MV,stage1,True,MV,0.98,,值为缺失哨兵'empty'
+0,MeasureName,surgery patients who were taking heart drugs caxxed beta bxockers before coming to the hospitax who were kept on the beta bxockers during the period just before and after their surgery,VAD,stage1,True,VAD,0.99,surgery patients who were taking heart drugs called beta blockers before coming to the hospital who were kept on the beta blockers during the period just before and after their surgery,"MeasureName与MeasureCode标准名称不符，存在拼写错误('caxxed'->'called','bxockers'->'blockers','hospitax'->'hospital')"
+0,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,Callahan Eye Foundation Hospital在伯明翰真实存在，名称合理非错误
+0,ZipCode,35233,DIST,stage2,False,NONE,0.95,,35233是伯明翰的正常邮编，且出现在正常样例中
+1,Score,empty,MV,stage1,True,MV,0.95,,Score列应为百分比，'empty'是明确的缺失哨兵
+1,Sample,empty,MV,stage1,True,MV,0.95,,Sample列应为患者数量，'empty'是明确的缺失哨兵
+1,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,全小写但无拼写错误，是合法医院名，与其他列无冲突
+1,ZipCode,35233,DIST,stage2,False,NONE,1.0,,"35233在正常样例中，且对应Birmingham, AL，一致"
+2,Score,empty,MV,stage1,True,MV,0.95,,Score为'empty'，明确缺失值，正常应为百分比
+2,Sample,empty,MV,stage1,True,MV,0.95,,Sample为'empty'，明确缺失值，正常应为如'0 patients'格式
+2,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.8,,医院名'callahan eye foundation hospital'为合法名称，与城市/州一致，分布异常为误报
+2,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,电话号码2053258100，区号205对应阿拉巴马州伯明翰，与地址一致，非错误
+3,Score,empty,MV,stage1,True,MV,1.0,,Value 'empty' is a missing value sentinel; score not reported.
+3,Sample,empty,MV,stage1,True,MV,1.0,,Value 'empty' is a missing value sentinel; sample size not reported.
+3,City,birminghxm,T,stage1,True,T,1.0,birmingham,"Typo: 'birminghxm' should be 'birmingham' (State AL, Zip 35233)."
+3,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,1.0,,"Name matches address and city: Callahan Eye Foundation Hospital is at 1720 University Blvd, Birmingham, AL."
+4,Score,empty,MV,stage1,True,MV,0.95,,"Score is 'empty', a missing value indicator; should be a percentage like '95%'."
+4,Sample,empty,MV,stage1,True,MV,0.95,,"Sample is 'empty', a missing value indicator; should be a patient count like '0 patients'."
+4,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.8,,"Hospital name appears legitimate and consistent with address in Birmingham, AL; distribution model likely flagged due to rarity."
+4,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,"Phone number has valid 10-digit format and area code 205 matches Birmingham, AL; likely safe."
+5,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，该列应为百分比分数
+5,Sample,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，该列应为患者数量
+5,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名与地址、城市州一致，为真实机构(UAB Callahan Eye Hospital)，非错误
+5,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,电话号码格式正确，区号205与伯明翰一致，无错误迹象
+6,Score,empty,MV,stage1,True,MV,0.99,,缺失哨兵'empty'，该列期望百分比格式
+6,Sample,empty,MV,stage1,True,MV,0.99,,缺失哨兵'empty'，该列期望患者数量格式
+6,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,正常医院名称，与城市州一致，为真实存在的医院，前序误报
+6,ZipCode,35233,DIST,stage2,False,NONE,0.99,,"35233为正常样本，且与Birmingham, AL匹配，前序误报"
+7,Score,empty,MV,stage1,True,MV,0.99,,值为'empty'，是明确的缺失值哨兵，该列应为百分比数字
+7,Sample,empty,MV,stage1,True,MV,0.99,,值为'empty'，是明确的缺失值哨兵，该列应为患者数量
+7,City,birmingxam,T,stage1,True,T,0.99,birmingham,'birmingxam'与正常值'birmingham'编辑距离1，明显拼写错误，且与State='al'一致
+7,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,'Callahan Eye Foundation Hospital'是伯明翰真实存在的医院，与城市及州一致，分布异常为误报
+10,City,sheffxeld,T,stage1,True,T,0.95,sheffield,与正常值'sheffield'仅一字之差，显系拼写错误，且Alabama州存在Sheffield市。
+10,HospitalOwner,government - hospital district or authority,DIST,stage2,False,NONE,0.99,,该值直接出现在normal_samples中，为合法所有权类型，无需修复。
+13,ProviderNumber,1xx19,FI,stage1,True,FI,0.95,,"ProviderNumber should be 5 digits, but contains 'xx' which are not digits, violating the format."
+13,Score,empty,MV,stage1,True,MV,0.99,,"Value is 'empty', a sentinel for missing data, while normal samples are percentage strings like '100%'."
+14,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'，是缺失哨兵，且Sample为0 patients，实际不可用
+14,HospitalName,helen keller memorial hospital,DIST,stage2,False,NONE,1.0,,该名称在正常样例中出现，无拼写错误
+14,PhoneNumber,2563864556,DIST,stage2,False,NONE,1.0,,该号码在正常样例中出现，无格式或分布问题
+16,HospitalType,acuxe care hospixals,FI,stage1,True,T,1.0,acute care hospitals,Typo: 'acuxe care hospixals' should be 'acute care hospitals'.
+16,City,sheffield,DIST,stage2,False,NONE,1.0,,City 'sheffield' matches state 'AL' and zip '35660'; not an error.
+17,Sample,3x patients,FI,stage1,True,FI,0.95,3 patients,"Value '3x patients' contains extra character 'x', not matching normal pattern of digits + ' patients'"
+17,CountyName,jefferson,DIST,stage2,True,VAD,0.98,colbert,"City Sheffield, AL (ZIP 35660) is in Colbert County, not Jefferson County"
+21,Condition,heart attaxk,FI,stage1,True,T,0.95,heart attack,明显的拼写错误，应为'heart attack'，与同行MeasureName一致
+21,Stateavg,al_ami-3,DIST,stage2,False,NONE,0.99,,值'al_ami-3'由State='al'和MeasureCode='ami-3'构成，完全合理，且在正常样例中
+22,HospitalOwner,government - hospxtal dxstrxct or authorxty,FI,stage1,True,T,0.99,government - hospital district or authority,"明显的拼写错误：hospxtal->hospital, dxstrxct->district, authorxty->authority"
+22,Condition,hearx axxack,FI,stage1,True,T,0.99,heart attack,拼写错误，正确应为heart attack
+24,PhoneNumber,334793870x,FI,stage1,True,FI,0.95,,PhoneNumber应为10位数字，当前值包含非数字字符'x'
+24,Score,empty,MV,stage1,True,MV,0.99,,'empty'为缺失哨兵，非有效分数
+24,EmergencyService,yxs,VAD,stage1,True,T,0.9,yes,'yxs'与正常值'yes'高度相似，且同ProviderNumber多数为'yes'，推断为拼写错误
+26,HospitalName,southeast alabama medxcal center,T,stage1,True,T,0.95,southeast alabama medical center,"'medxcal' is a typo of 'medical', confirmed by high-frequency name and edit distance 1."
+27,HospitalOwner,government - hospital xistrict or authority,FI,stage1,True,T,0.95,government - hospital district or authority,Typo: 'xistrict' instead of 'district' matches normal sample.
+27,HospitalName,southeast alabama medical center,DIST,stage2,False,NONE,0.8,,Name is plausible and consistent with normal samples; likely a false positive.
+31,HospitalOwner,governmenx - hospixal disxricx or auxhorixy,FI,stage1,True,T,0.99,government - hospital district or authority,明显的拼写错误，'t'被替换为'x'，与标准值仅差几个字符
+31,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,该值在正常样本中完全匹配，无错误迹象
+36,PhoneNumber,xx479x8701,FI,stage1,True,FI,1.0,,"Contains non-digit characters 'x', expected 10-digit number"
+39,HospitalType,acxte care hospitals,FI,stage1,True,T,0.95,acute care hospitals,"Typo: 'acute' is misspelled as 'acxte'. Despite appearing in normal samples, it is clearly a typo variant of the standard value."
+39,State,al,DIST,stage2,False,NONE,0.9,,"State 'al' correctly represents Alabama, consistent with City (Dothan), ZipCode (36302), and Stateavg prefix ('al_'). False alarm from distribution model."
+42,HospitalOwner,gxvernment - hxspital district xr authxrity,FI,stage1,True,T,0.95,government - hospital district or authority,值中字母'o'被系统性替换为'x'，形成非标准枚举值，根据正常样例应为 'government - hospital district or authority'，属于拼写/替换错误
+42,State,xl,VAD,stage1,True,VAD,0.98,al,ProviderNumber 10001 通常对应州 'al'，且医院名称、城市均指向阿拉巴马，当前值 'xl' 违反跨列依赖，应为 'al'
+43,EmergencyService,yex,VAD,stage1,True,T,0.95,yes,"Typo: 'yex' is a misspelling of 'yes', which is the expected value for this hospital based on the majority of its records."
+43,MeasureName,patients who got treatment  at the right time (within 24 hours before or after their surgery) to help prevent blood clots after certain types of surgery,DIST,stage2,True,FI,0.9,patients who got treatment at the right time (within 24 hours before or after their surgery) to help prevent blood clots after certain types of surgery,"Extra space in 'treatment  at', should be a single space, consistent with the clean format in normal samples."
+44,ZipCode,x5957,FI,stage1,True,FI,0.95,35957,x5957不符合常规5位数字邮编格式，且Boaz真实邮编为35957，x极可能是3的误录
+44,City,boaz,DIST,stage2,False,NONE,0.99,,Boaz是阿拉巴马真实城市，且整行数据均为小写，与前序正常样本的大写差异仅为格式不一致，不是错误
+45,ProviderNumber,x0005,FI,stage1,True,FI,0.9,00005,ProviderNumber应全为5位数字，当前值包含字母'x'，疑为错误输入，移除'x'补零得'00005'。
+45,MeasureCode,ami-2,DIST,stage2,False,NONE,0.95,,该值在正常样例中存在，且与同行Condition和MeasureName语义一致，应为正确值。
+46,State,xl,VAD,stage1,True,T,0.95,al,Stateavg为al_ami-3，ProviderNumber 10005通常对应AL，xl与al仅一字之差，视为typo
+46,HospitalName,marshall medical center south,DIST,stage2,False,NONE,0.9,,与CountyName Marshall一致，全小写格式符合样例，无跨列矛盾，应为合法名称
+47,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，Score empty合理，表示无数据
+47,Condition,heart attack,DIST,stage2,False,NONE,0.98,,heart attack与MeasureCode和MeasureName一致，正常样例包含，无错误
+47,City,boaz,DIST,stage2,False,NONE,0.95,,boaz与State AL和ZipCode 35957匹配，正确城市名，小写非错误
+48,ProviderNumber,10005,DIST,stage2,False,NONE,0.95,,"Value '10005' is a valid 5-digit provider ID, consistent with normal samples like '10046', and no cross-column dependency error."
+48,Score,100%,DIST,stage2,False,NONE,0.99,,'100%' is a common percentage score present in normal samples; no format or semantic issue.
+49,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵'empty'，Score应为百分数或空，且Sample为0患者，但此处明确表示缺失
+49,Condition,heart attack,DIST,stage2,False,NONE,1.0,,当前值与正常样本中的'heart attack'完全一致，且与同行MeasureName等列语义匹配，属于误报
+50,Score,empty,MV,stage1,True,MV,0.95,,Value 'empty' is a missing sentinel; Score likely blank given Sample '0 patients'
+50,State,xl,VAD,stage1,True,T,0.99,al,"'xl' is a typo for 'al', supported by ProviderNumber, City, ZipCode, and Stateavg"
+50,HospitalName,marshall medical center south,DIST,stage2,False,NONE,0.99,,Valid hospital name consistent with other columns; no error detected
+51,EmergencyService,yxs,VAD,stage1,True,T,0.95,yes,"Value 'yxs' is a typo of 'yes', common in normal samples, and consistent with hospital type."
+52,City,boaz,DIST,stage2,False,NONE,0.95,,"Boaz is a real city in Alabama, matches ZIP 35957 and Marshall County; cross-column consistency indicates false positive."
+52,CountyName,marshall,DIST,stage2,False,NONE,0.99,,"'Marshall' is a valid Alabama county, present in normal samples; matches City/State/ZIP; not an error."
+56,Stateavg,al_pn-xb,FI,stage1,True,FI,0.85,al_pn-3b,应与MeasureCode pn-3b匹配，后缀xb疑为3b误输
+56,City,boxz,T,stage1,True,T,0.99,boaz,与邮编35957对应城市boaz仅差一个字符，明显拼写错误
+56,Address,2505 u s highway 431 north,DIST,stage2,False,NONE,0.9,,合法地址格式，医院实际位于该高速路，分布异常非实际错误
+57,PhoneNumber,2x6x938310,FI,stage1,True,MV,1.0,,电话号码包含非数字字符'x'，实际为缺失哨兵，无法推断正确号码
+57,Address,2505xuxsxhighwayx431xnorth,VAD,stage1,True,FI,1.0,2505 u s highway 431 north,地址中包含占位符'x'，与ProviderNumber=10005的已知地址不一致，正确地址应为'2505 u s highway 431 north'
+60,PhoneNumber,2x6x938310,FI,stage1,True,FI,0.95,,"Contains non-digit characters 'x', violating expected 10-digit numeric format."
+63,ZipCode,3595x,FI,stage1,True,FI,0.95,,"Value contains non-numeric character 'x', all normal samples are 5-digit numbers."
+65,PhoneNumber,2565x38310,FI,stage1,True,FI,0.95,,包含非法字符'x'，北美电话号码应为10位纯数字，无法推断正确数字
+65,Score,empty,MV,stage1,False,NONE,0.9,,该行样本数为0患者，分数不可计算，标记为'empty'符合语义，非数据错误
+65,HospitalName,marshall medical center south,DIST,stage2,True,FI,0.95,Marshall Medical Center South,医院名称应首字母大写，但当前为全小写
+66,ProviderNumber,10005,DIST,stage2,False,NONE,0.95,,ProviderNumber '10005' 与同列正常样例格式一致，无异常，前序 DIST 标记为误报
+67,CountyName,mxrshxll,T,stage1,True,T,0.95,marshall,与高频正常值'marshall'编辑距离2，且该行HospitalName含'marshall'，地理一致
+68,MeasureCode,scip-vte-2,DIST,stage2,False,NONE,0.95,,"MeasureCode 'scip-vte-2' is consistent with Condition, MeasureName, and Stateavg (AL prefix); similar code 'scip-card-2' in normal samples suggests it is a valid SCIP measure, likely a false alarm from the distribution detector."
+70,ZipCode,3563x,FI,stage1,True,FI,0.95,35630,"Contains letter 'x', should be 5-digit number; normal samples are purely numeric; Florence, AL zip is typically 35630."
+72,CountyName,laudxrdalx,T,stage1,True,T,0.98,lauderdale,拼写错误，与City/State匹配的县名应为Lauderdale，编辑距离2且有无效字符x
+73,Condition,hearx axxack,FI,stage1,True,T,0.95,heart attack,Typo: 'hearx axxack' should be 'heart attack' based on MeasureName and MeasureCode.
+74,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，且Sample为0 patients，得分不可计算
+74,MeasureCode,ami-7a,DIST,stage2,False,NONE,0.9,,值'ami-7a'与Condition相关，且Stateavg 'al_ami-7a'与之匹配，为合理编码
+77,CountyName,laudexdale,T,stage1,True,T,0.95,lauderdale,拼写错误：'laudexdale' 与阿拉巴马州实际存在的 Lauderdale 县仅一个字符差异，且同列正常样例均为该州真实县名。
+79,City,fxorence,T,stage1,True,T,0.95,florence,"ZipCode 35631 对应 Florence, AL，'fxorence' 应为 'florence' 的拼写错误，编辑距离1，且与同州正常样例一致。"
+81,ProviderNumber,1000x,FI,stage1,True,FI,0.95,,ProviderNumber应为5位数字，当前包含字母'x'，不符合格式规范
+82,State,al,DIST,stage2,False,NONE,0.95,,"State 'al' is consistent with City 'florence', ZipCode '35631', CountyName 'lauderdale' (all in Alabama), and matches Stateavg prefix 'al_pn-4'. The flagged DIST is likely due to anomalous normal samples, not an error."
+83,State,xl,VAD,stage1,True,VAD,0.95,al,"City='florence', ZipCode='35631' 明确指向阿拉巴马州，State 应为 'al'，当前 'xl' 与上下文不一致，疑为 typo 或错误编码。"
+88,City,florxncx,T,stage1,True,T,0.95,florence,与AL州邮编35631对应城市Florence编辑距离为2，明显拼写错误
+88,MeasureCode,scip-inf-2,DIST,stage2,False,NONE,0.9,,与同行Condition='surgical infection prevention'及MeasureName语义一致，属于SCIP有效代码，非错误
+91,Sample,619 paxienxs,FI,stage1,True,T,0.95,619 patients,"'paxienxs' is a typo for 'patients', as seen in normal samples."
+93,ZipCode,3563x,FI,stage1,True,FI,0.99,35630,"包含非数字字符'x'，正常样本均为5位数字。该行城市疑似Florence, AL，常见邮编为35630，'x'可能是'0'的误输。"
+93,City,flxrence,T,stage1,True,T,0.95,florence,与高频值'florence'编辑距离为1，且所在州、县、地址均指向Alabama的Florence市，确认为拼写错误。
+94,MeasureName,xeart attack patients given aspirin at arrival,T,stage1,True,T,0.99,heart attack patients given aspirin at arrival,'xeart' 与高频正确值 'heart' 编辑距离为1，典型拼写错误
+94,Address,702xnxmainxst,VAD,stage1,True,T,0.95,702 n main st,同 ProviderNumber 多数记录为 '702 n main st'，'xnx' 为 'n' 的错误重复
+94,CountyName,covington,DIST,stage2,False,NONE,0.99,,Covington 是 Alabama 州真实县名，且与 City=opp、ZipCode=36467 一致，分布异常可能是样本偏差
+95,Condition,heart attack,DIST,stage2,False,NONE,0.95,,"Value 'heart attack' matches MeasureCode 'ami-2' and MeasureName, and appears as a normal sample; flagged as DIST but is consistent with row context and common correct form."
+96,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is 0 patients, so Score is correctly reported as 'empty' (not applicable)."
+96,ZipCode,36467,DIST,stage2,False,NONE,0.99,,"ZipCode 36467 is correct for Opp, AL; matches city and state."
+96,HospitalName,mizell memorial hospital,DIST,stage2,False,NONE,0.99,,"Hospital name is correct for this location; matches known hospital in Opp, AL (Mizell Memorial Hospital)."
+97,Score,empty,MV,stage1,True,MV,1.0,,"Value 'empty' is a missing sentinel, not a valid percentage."
+97,MeasureCode,axi-4,VAD,stage1,True,VAD,0.95,ami-4,"MeasureName indicates heart attack; MeasureCode should be 'ami-4', not 'axi-4'."
+97,CountyName,covington,DIST,stage2,False,NONE,0.9,,"City Opp, AL zip 36467 is in Covington County; value is correct."
+97,Condition,heart attack,DIST,stage2,False,NONE,0.9,,"'heart attack' is a valid condition, present in normal samples and matching the measure."
+98,HospitalType,acute care hosxitals,FI,stage1,True,T,0.95,acute care hospitals,拼写错误：'hosxitals'应为'hospitals'，整列期望唯一正确值
+98,State,xl,VAD,stage1,True,VAD,0.99,al,State与同行ZipCode(36467)和City(opp)及Stateavg(al_ami-5)不一致，且ProviderNumber 10007常对应AL
+99,Score,empty,MV,stage1,True,MV,0.95,,Score列应为百分比值，'empty'是缺失哨兵，且Sample为0 patients说明无数据，仅需标准化为空值
+99,Condition,heart attack,DIST,stage2,False,NONE,0.95,,值'heart attack'是正常样本，且与同行MeasureName相符，前序标记误报
+100,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is '0 patients', so Score is reasonably empty; 'empty' is a consistent representation for missingness when denominator is zero."
+100,CountyName,covington,DIST,stage2,False,NONE,0.99,,'covington' is present in the normal samples for CountyName; no abnormality.
+100,Condition,heart attack,DIST,stage2,False,NONE,0.99,,'heart attack' is a correct medical condition and appears in the normal samples; the flagged typo examples in samples are different strings.
+101,PhoneNumber,3344x33541,FI,stage1,True,FI,0.99,334433541,包含字母'x'，不符合北美电话号码纯数字格式，正常样例均为10位数字；移除'x'后为有效号码
+101,MeasureCode,hfx1,FI,stage1,True,FI,0.9,hf-1,缺少连字符，不符合'字母-数字'的编码规范，基于同行Condition为heart failure，最可能为'hf-1'
+103,CountyName,covington,DIST,stage2,False,NONE,0.99,,CountyName 'covington' is in normal samples and matches city 'opp' in Alabama (Covington County). No error detected.
+104,CountyName,covington,DIST,stage2,False,NONE,0.99,,"Opp, AL 36467 位于 Covington County，值正确且与城市/州/邮编一致"
+106,Address,702 x maix st,T,stage1,True,T,0.98,702 n main st,"地址拼写错误，结合医院名、城市、州、邮编，正确地址为 702 N Main St, Opp, AL 36467。"
+108,MeasureCode,pnx5c,FI,stage1,True,T,0.95,pn-5c,MeasureCode 'pnx5c' 与 Stateavg 中的 'pn-5c' 相近，且正常样本均为带连字符的模式，'x' 可能是 '-' 的误打。
+111,MeasureName,surgery patiexts who were takixg heart drugs called beta blockers before comixg to the hospital who were kept ox the beta blockers durixg the period just before axd after their surgery,VAD,stage1,True,T,0.98,surgery patients who were taking heart drugs called beta blockers before coming to the hospital who were kept on the beta blockers during the period just before and after their surgery,"Multiple typographical errors compared to the standard text for SCIP-CARD-2 (e.g., 'patiexts'->'patients', 'takixg'->'taking', 'ox'->'on', 'axd'->'and'), consistent with a misspelled version, not a cross-column dependency violation."
+111,CountyName,covington,DIST,stage2,False,NONE,0.98,,"'covington' is a normal sample for county names; it matches the city (Opp) and state (AL) per typical geographic references, indicating the distribution flag is a false positive."
+113,HospitalOwner,volunxary non-profix - privaxe,FI,stage1,True,T,0.98,voluntary non-profit - private,与标准枚举值'voluntary non-profit - private'相比有多处拼写错误（'volunxary'、'profix'、'privaxe'），显为typo
+113,CountyName,covington,DIST,stage2,False,NONE,0.95,,'covington'本身出现在正常样例列表中，属于合法值，前序标记为误报
+115,Score,empty,MV,stage1,True,MV,1.0,,Score值为'empty'，是明确的缺失值哨兵。
+115,Sample,0 patixnts,FI,stage1,True,T,1.0,0 patients,'patixnts'是'patients'的拼写错误。
+115,CountyName,covington,DIST,stage2,False,NONE,1.0,,'covington'在正常样例中出现，是一个合法的阿拉巴马州县名。
+115,HospitalName,mizell memorial hospital,DIST,stage2,False,NONE,0.9,,'mizell memorial hospital'结构符合正常样例，且在该城市真实存在，无错误。
+117,CountyName,covington,DIST,stage2,False,NONE,0.95,,"CountyName出现在正常样例中，且与City、State、ZipCode一致（Opp, AL 36467属于Covington County），无错误。"
+117,PhoneNumber,3344933541,DIST,stage2,False,NONE,0.9,,区号334符合阿拉巴马州东南部（Opp所在区域），格式与正常样例一致，无错误迹象。
+118,CountyName,covington,DIST,stage2,False,NONE,0.95,,covington 是阿拉巴马州的一个合法县名，且出现在正常样例中，与整行数据一致
+118,ProviderNumber,10007,DIST,stage2,False,NONE,0.9,,ProviderNumber 格式正常，与正常样例同为5位数字，无跨列冲突，前序标记可能为误报
+119,MeasureName,heart attack patients given aspirin at arrivax,T,stage1,True,T,0.99,heart attack patients given aspirin at arrival,"Typo in 'arrivax', should be 'arrival' to match standard measure name."
+119,State,ax,VAD,stage1,True,VAD,0.99,al,State code 'ax' is inconsistent with ZipCode 36049 and County 'crenshaw' which are in Alabama; should be 'al'.
+120,Score,x00%,FI,stage1,True,FI,0.95,100%,"Value contains non-numeric 'x', violating percentage pattern; likely typo for '100%'."
+120,MeasureCode,axi-2,VAD,stage1,True,VAD,0.99,ami-2,Code 'axi-2' conflicts with MeasureName 'heart attack patients given aspirin at discharge' (expected 'ami-2') and with Stateavg column value 'al_ami-2' which embeds code 'ami-2'.
+121,Score,empty,MV,stage1,True,MV,0.95,,Score值为'empty'，非百分比格式，应视为缺失值。
+122,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，该度量不适用，'empty'是预期缺失标记。
+124,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is '0 patients', so score cannot be calculated; missing is expected, not an error."
+124,Condition,heart attack,DIST,stage2,False,NONE,0.98,,Condition 'heart attack' matches MeasureName and is a valid value in normal samples; consistent with row context.
+125,Score,empty,MV,stage1,True,MV,1.0,,Score值为缺失哨兵'empty'，且同行Sample为0 patients，表明无法计算分数，确为缺失值
+127,Condition,heaxt failuxe,FI,stage1,True,T,0.95,heart failure,明显是'heart failure'的拼写错误，符合typo特征，且与正常样例中的正确值高度相似。
+127,Score,72%,DIST,stage2,False,NONE,0.7,,Score值72%虽低于常见值，但仍在合理百分比范围内，格式正确，无跨列矛盾，可能仅是分布异常而非错误。
+128,Score,75%,DIST,stage2,False,NONE,0.9,,Score value is within valid range and correctly formatted; low percentage is plausible for a small sample (8 patients) and does not conflict with other columns.
+131,HospitalName,crenshaw cxmmunity hxspital,T,stage1,True,T,0.99,crenshaw community hospital,"Typo: 'cxmmunity' -> 'community', 'hxspital' -> 'hospital', matches known hospital in Luverne, AL."
+131,City,luverne,DIST,stage2,False,NONE,0.95,,"Luverne is a valid city in Crenshaw County, AL, consistent with State, CountyName, and ZipCode 36049."
+133,Sample,21 pxtients,FI,stage1,True,T,0.95,21 patients,'pxtients' is a typo of 'patients'
+136,CountyName,crxnshaw,T,stage1,True,T,0.98,crenshaw,CountyName应与HospitalName中的地名一致，'crxnshaw'与正常值'crenshaw'仅一个字母差异，是拼写错误
+136,Score,100%,DIST,stage2,False,NONE,0.95,,Score为'100%'是合法百分比，且Sample为1，符合上下文，无错误迹象
+137,ZipCode,36x49,FI,stage1,True,FI,0.98,36049,"Contains non-digit 'x', likely typo for '0'; Luverne, AL ZIP is 36049."
+137,Score,100%,DIST,stage2,False,NONE,0.95,,100% is a valid percentage and appears in normal samples; no evidence of error.
+139,ZipCode,360x9,FI,stage1,True,FI,0.95,36049,"包含非法字符'x'，不符合全数字5位邮编格式；根据城市Luverne, AL，正确邮编应为36049。"
+139,Score,100%,DIST,stage2,False,NONE,0.9,,正常样本中包括100%，且样本量2例时得分100%合理，无其他列违反依赖，前序分布标记为误报。
+140,Score,empty,MV,stage1,False,NONE,0.98,,样本量Sample为“0 patients”，无数据时Score为empty是合理的，并非缺失值误报
+140,State,ax,VAD,stage1,True,T,0.95,al,City为luverne，ZipCode36049，Stateavg前缀al，均指示State应为AL，ax为拼写错误
+142,Score,100%,DIST,stage2,False,NONE,0.99,,Score值为100%是正常百分比表示，与正常样例一致，且与同行其他数据无冲突。
+143,Score,100%,DIST,stage2,False,NONE,0.95,,Value '100%' is common in normal samples and consistent with sample size of 4 patients.
+145,MeasureName,heart attaxk patients given aspirin at disxharge,T,stage1,True,T,0.95,heart attack patients given aspirin at discharge,两处拼写错误：'attaxk'应为'attack'，'disxharge'应为'discharge'，与高频正确值及Condition一致
+145,MeasureCode,ami-2,DIST,stage2,False,NONE,0.9,,正常样例中包含'ami-2'，且与同行Condition和Stateavg一致，为合法代码
+149,ZipCode,3x640,FI,stage1,True,FI,0.95,35640,包含字母'x'，不符合5位数字格式；根据城市和州，正确邮编应为35640
+149,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，Score为empty表示无数据，并非错误缺失
+149,CountyName,morgan,DIST,stage2,False,NONE,0.95,,Morgan是该城市所在的郡，与上下文一致，应为正确值
+150,Score,empty,MV,stage1,False,NONE,0.9,,"Sample is '0 patients', so Score is expected to be missing; 'empty' is a valid missing indicator in this context."
+150,MeasureName,heart attack patients given pci within 90 minutes of arrival,DIST,stage2,False,NONE,1.0,,MeasureName matches Condition and MeasureCode; it is a standard description for AMI-8a.
+150,MeasureCode,ami-8a,DIST,stage2,False,NONE,1.0,,MeasureCode 'ami-8a' is consistent with Condition 'heart attack' and Stateavg 'al_ami-8a'; it is a valid code.
+152,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,当前值'yes'是正常示例之一，且与同行其他列无冲突，急诊服务标记合理。
+155,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,"'yes' is a common valid value for EmergencyService, consistent with the row context, and was likely misflagged as a state_code anomaly."
+157,ZipCode,3x640,FI,stage1,True,FI,0.95,35640,"Contains non-digit 'x'; Hartselle, AL zip is 35640"
+157,HospitalOwner,pxopxietaxy,FI,stage1,True,T,0.9,proprietary,"Typo: all 'r' replaced with 'x', matches 'proprietary'"
+157,EmergencyService,yxs,VAD,stage1,False,NONE,0.8,,'yxs' appears in normal samples; no cross-column inconsistency
+158,Score,9x%,FI,stage1,True,FI,0.9,90%,"Contains non-numeric character 'x', likely a typo for '90%'"
+159,HospitalOwner,proxrietary,FI,stage1,True,T,0.98,proprietary,拼写错误，多了一个'x'，应匹配枚举值'proprietary'
+159,MeasureCode,pn-6,DIST,stage2,False,NONE,0.95,,MeasureCode 'pn-6' 与 Condition 'pneumonia' 及 MeasureName 一致，且出现在正常样例中，无错误
+161,Address,201 pine sxreex norxhwesx,VAD,stage1,True,T,0.95,201 pine street northwest,"Typo: 'sxreex' -> 'street', 'norxhwesx' -> 'northwest'. Majority of records for this provider use correct spelling."
+161,CountyName,morgan,DIST,stage2,False,NONE,1.0,,"Morgan County is correct for Hartselle, AL (ZIP 35640). Value is valid and matches expected county."
+162,HospitalOwner,xroprietary,FI,stage1,True,T,0.95,proprietary,"Value 'xroprietary' appears to be a typo for 'proprietary', which is one of the standard enumerated values."
+163,Score,x7%,FI,stage1,True,FI,0.95,7%,"Contains non-numeric character 'x', should be a pure percentage like '7%' based on normal samples."
+164,HospitalOwner,pxopxietaxy,FI,stage1,True,OTHER,0.95,,值不在标准枚举中，且无法识别为已知类型
+164,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,正常值，在枚举内，且与上下文一致
+165,Score,empty,MV,stage1,False,NONE,0.9,,样本量为0，得分不可用，empty表示无数据，与上下文一致
+165,State,ax,VAD,stage1,True,T,0.95,al,City和ZipCode对应阿拉巴马州，State应为al，ax是拼写错误
+165,MeasureCode,scip-inf-4,DIST,stage2,False,NONE,0.9,,代码与Condition和MeasureName一致，是有效的手术感染预防指标
+166,Sample,xx patients,FI,stage1,True,FI,0.95,,值'xx patients'不符合数字格式，应为整数+空格+patients
+170,Sample,6xpatients,FI,stage1,True,FI,0.95,6 patients,格式错误，正常应为数字+空格+patients，当前为6xpatients
+170,CountyName,marshall,DIST,stage2,False,NONE,0.9,,与城市、州一致，且出现在正常样例中，分布异常为误报
+170,City,guntersville,DIST,stage2,False,NONE,0.9,,Guntersville是AL的真实城市，与州和邮编一致，分布异常为误报
+171,HospitalName,marshall medical cenxer norxh,T,stage1,True,T,0.95,marshall medical center north,"Typo: 'cenxer' for 'center', 'norxh' for 'north'; matches known hospital in Guntersville, AL"
+171,HospitalOwner,government - hospital district or authority,DIST,stage2,False,NONE,0.9,,Value is a normal sample and consistent with hospital type; no error detected
+174,Score,empty,MV,stage1,True,MV,0.98,,Score为'empty'是缺失值哨兵，且Sample为0 patients，无可用分数，符合MV定义。
+174,MeasureCode,ami-7a,DIST,stage2,False,NONE,0.95,,MeasureCode 'ami-7a' 与Condition、MeasureName、Stateavg一致，属于AMI相关代码，正常。
+175,Score,empty,MV,stage1,True,MV,0.9,,缺失哨兵 'empty' 表示无数据，样本为0符合上下文，但仍需转换为标准缺失值。
+175,Address,8000 alabama xigxway 69,T,stage1,True,T,0.99,8000 alabama highway 69,'xigxway' 与高频值 'highway' 编辑距离为2，极可能为拼写错误。
+177,MeasureCode,hf-x,FI,stage1,True,FI,0.9,,"Value 'hf-x' contains 'x' where a digit is expected, violating the observed pattern of dash-separated lowercase letters plus digits; normal samples like 'hf-3','hf-4' for heart failure suggest a digit should follow 'hf-'."
+180,City,guntxrsvillx,T,stage1,True,T,0.95,guntersville,当前值'guntxrsvillx'与真实城市'Guntersville'（AL 35976）仅有字符替换（x→e），且与整行State/Zip一致，确认为拼写错误。
+182,State,xl,VAD,stage1,True,T,0.98,al,"City 'guntersville' and CountyName 'marshall' are in Alabama, and Stateavg is 'al_pn-4', so State should be 'al'; 'xl' is likely a typo."
+187,Score,95x,FI,stage1,True,T,0.95,95%,Value '95x' is a typo for '95%'
+187,ProviderNumber,10010,DIST,stage2,False,NONE,0.9,,"Valid ID format, matches normal samples"
+189,City,guntersville,DIST,stage2,False,NONE,0.95,,"Guntersville is a valid city in AL, consistent with State and HospitalName."
+189,ZipCode,35976,DIST,stage2,False,NONE,0.95,,"35976 is the correct ZIP code for Guntersville, AL, consistent with City and State."
+190,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0患者，Score不适用，空值合理
+190,MeasureCode,scip-inx-4,VAD,stage1,True,T,0.99,scip-inf-4,拼写错误，与MeasureName和Stateavg不一致，应为scip-inf-4
+193,Stateavg,al_scix-vte-2,VAD,stage1,True,VAD,0.95,al_scip-vte-2,"MeasureCode is scip-vte-2, but Stateavg uses 'scix' instead of 'scip', violating cross-column dependency; 92% of such cases have al_scip-vte-2, clearly a typo."
+196,ZipCode,3x23x,FI,stage1,True,FI,0.95,35233,"Value contains letters 'x' instead of digits, likely OCR error for 35233 (Birmingham, AL ZIP)."
+199,HospitalType,acute care hosxitals,FI,stage1,True,T,0.95,acute care hospitals,与唯一合法值 acute care hospitals 相比，多了一个 x 少了一个 p，为拼写错误
+199,Condition,heaxt attack,FI,stage1,True,T,0.95,heart attack,heart attack 错误拼写为 heaxt attack，r 误为 x
+199,Score,empty,MV,stage1,False,NONE,0.95,,Sample 为 0 patients，Score 缺失合情合理，并非错误
+201,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.99,,该值与正常样例'voluntary non-profit - private'完全一致，属于合法值，前序标记为误报。
+206,City,birmingham,DIST,stage2,False,NONE,0.95,,正常样例中包含 'birmingham'，且与同行 State 'al' 一致，上下文合理，前序标记为误报。
+207,City,birmixgham,T,stage1,True,T,0.95,birmingham,与高频城市 'birmingham' 仅一个字符差异，且地址及州信息支持，属拼写错误
+207,PhoneNumber,2058383122,DIST,stage2,False,NONE,0.7,,号码格式正常，区号205与州AL匹配，分布异常可能因号码唯一性所致，无明确错误证据
+208,Score,x5%,FI,stage1,True,FI,0.95,,Score应为数字后跟'%'，当前'x5%'中'x'不是数字，不符合百分比格式。
+208,HospitalName,st vincents east,DIST,stage2,False,NONE,0.98,,'st vincents east'在正常样例列表中直接出现，属于合法值，标记为误报。
+208,ProviderNumber,10011,DIST,stage2,False,NONE,0.9,,'10011'符合'100XX'的常见模式，且同行其他列无异常，无充分证据表明是错误。
+210,MeasureName,pneumoniaxpatientsxassessedxandxgivenxinfluenzaxvaccination,VAD,stage1,True,VAD,0.99,pneumonia patients assessed and given influenza vaccination,"MeasureName for pn-7 should be 'pneumonia patients assessed and given influenza vaccination', but current value uses 'x' instead of spaces, violating cross-column dependency."
+212,City,bxrmxngham,T,stage1,True,T,0.95,birmingham,与正常样本 'birmingham' 编辑距离2，且所在州 AL 有该城市，明显拼写错误
+213,ProviderNumber,x00xx,FI,stage1,True,FI,1.0,,ProviderNumber 应为5位数字，当前 'x00xx' 包含非数字字符，不符合格式。
+213,HospitalType,acutx carx hospitals,FI,stage1,True,T,0.95,acute care hospitals,'acutx carx hospitals' 是 'acute care hospitals' 的拼写错误，字符替换导致。
+216,HospitalOwner,volunxary non-profix - privaxe,FI,stage1,True,T,0.99,voluntary non-profit - private,"Typos: volunxary->voluntary, non-profix->non-profit, privaxe->private; matches normal sample"
+216,CountyName,jeffersxn,T,stage1,True,T,0.99,jefferson,Typo: jeffersxn->jefferson; edit distance 1; consistent with City/State
+217,PhoneNumber,2058x8x122,FI,stage1,True,FI,0.9,,包含非数字字符'x'，不符合10位数字电话号码格式
+218,HospitalOwner,voluntary nonxprofit x private,FI,stage1,True,T,0.95,voluntary non-profit - private,拼写错误，应为 'voluntary non-profit - private'
+219,Stateavg,al_ami-1,DIST,stage2,False,NONE,0.95,,Stateavg由State和MeasureCode组合而成，当前值'al_ami-1'与同行的State='al'和MeasureCode='ami-1'完全一致，且与正常样例格式匹配，无错误。
+221,HospitalOwner,voluntaryxnon-profitx-xchurch,FI,stage1,True,FI,0.95,voluntary non-profit - church,Contains 'x' replacing spaces/hyphens; matches standard category 'voluntary non-profit - church'.
+221,CountyName,dx kalb,T,stage1,True,T,0.95,de kalb,"Misspelling of 'de kalb', confirmed by City 'fort payne' being in DeKalb County, AL."
+222,Condition,heart attack,DIST,stage2,False,NONE,0.95,,"Value 'heart attack' is a correct medical condition, consistent with MeasureName and normal samples."
+223,CountyName,xe kalb,T,stage1,True,T,0.95,de kalb,与同行的City 'fort payne' 和 State 'al' 匹配的县应为 'de kalb'，当前值 'xe kalb' 编辑距离为1，明显拼写错误。
+224,Sample,1 patiexts,FI,stage1,True,T,0.99,1 patients,"'patiexts' is a typo of 'patients', normal samples use 'patients'"
+224,Condition,heart attack,DIST,stage2,False,NONE,0.9,,"'heart attack' is a correct value, appears in normal samples"
+224,MeasureCode,ami-7a,DIST,stage2,False,NONE,0.9,,"Consistent with Stateavg 'al_ami-7a' and Condition, valid code"
+225,Condition,hexrt attxck,FI,stage1,True,T,0.95,heart attack,应为 heart attack，拼写错误，与MeasureCode ami-8a (heart attack) 一致
+225,Score,40%,DIST,stage2,False,NONE,0.6,,虽然百分比低，但无明确错误依据，可能是真实值
+225,HospitalName,dekalb regional medical center,DIST,stage2,False,NONE,0.8,,名称与County de kalb 相符，结构正常，无错误迹象
+226,ZipCode,35968,DIST,stage2,False,NONE,0.95,,ZipCode 35968 是 Alabama 州 Fort Payne 的有效邮政编码，与 City 和 State 一致，属于前序误报。
+227,CountyName,dx kalb,T,stage1,True,T,0.95,de kalb,"Hospital is in Fort Payne, AL, which is in DeKalb County; hospital name also contains 'dekalb'; 'dx' is a typo for 'de' (edit distance 1)."
+228,PhoneNumber,2568453x50,FI,stage1,True,FI,0.98,,包含字母'x'，不符合10位纯数字格式，且正常样例均为纯数字。
+228,City,fort payxe,T,stage1,True,T,1.0,fort payne,与高频值'fort payne'编辑距离1，结合医院真实位置和Stateavg前缀'al'，应修正为'fort payne'。
+228,State,ax,VAD,stage1,True,VAD,1.0,al,Stateavg前缀为'al'，且ProviderNumber 10012在多数记录中对应State='al'，City也指向AL州，'ax'为错误值。
+229,Condition,heart faxlure,FI,stage1,True,T,0.95,heart failure,拼写错误，'faxlure' 应为 'failure'，与同行 MeasureCode 'hf-4' 一致
+229,MeasureName,heart failure patients given smoking cessation advice/counseling,DIST,stage2,False,NONE,0.9,,与同行 Condition、MeasureCode 一致，是合理的度量名称，非错误
+230,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,取值 'yes' 是 EmergencyService 列的正常合法值之一，与正常样例中的 'yes' 和 'no' 一致，且符合业务逻辑。前序检测器因语义类型推测为 state_code 误报。
+232,ZipCode,359x8,FI,stage1,True,FI,0.9,35968,"Contains non-digit 'x' while zip codes should be 5-digit numbers; given City Fort Payne, AL, likely correct zip is 35968."
+234,Sample,82 patientx,FI,stage1,True,T,1.0,82 patients,"Expected 'patients' but found 'patientx', likely a typo with an extra 'x'."
+236,Condition,suxgical infection pxevention,FI,stage1,True,T,0.99,surgical infection prevention,明显的拼写错误：'suxgical'应为'surgical'，'pxevention'应为'prevention'，正确值为'surgical infection prevention'。
+237,Score,9x%,FI,stage1,True,FI,0.95,,Value '9x%' is not a valid percentage; contains non-numeric 'x'.
+238,HospitalOwner,voxuntary non-profit - church,FI,stage1,True,T,1.0,voluntary non-profit - church,'voxuntary' is a typo of 'voluntary'; the correct category is 'voluntary non-profit - church'.
+238,Score,xx%,FI,stage1,True,MV,1.0,,'xx%' is a non-numeric placeholder indicating a missing value.
+238,CountyName,xe kalb,T,stage1,True,T,1.0,de kalb,"Typo: 'xe kalb' is edit distance 1 from 'de kalb', consistent with Alabama."
+239,Condition,surgxcal infectxon preventxon,FI,stage1,True,T,0.95,surgical infection prevention,"The value is a misspelling of 'surgical infection prevention', which matches the context of the measure."
+240,Score,empty,MV,stage1,True,MV,0.9,,该列应为百分比，当前值为缺失哨兵“empty”；结合Sample=0 patients，应留空而非字符串
+240,MeasureCode,scip-inf-4,DIST,stage2,False,NONE,0.9,,与MeasureName一致，属于SCIP指标系列代码，合法
+240,MeasureName,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,DIST,stage2,False,NONE,0.95,,与MeasureCode匹配，为心外科血糖控制指标全称，合法
+240,Address,200 med center drive,DIST,stage2,False,NONE,1.0,,完全相同值出现在正常样例中，为常见合法地址
+242,Address,200 med center drive,DIST,stage2,False,NONE,0.95,,Value matches a normal sample exactly and is consistent with hospital name and location.
+243,HospitalName,dexalb regional medical center,T,stage1,True,T,0.95,dekalb regional medical center,CountyName为'de kalb'，医院名应为'dekalb'而非'dexalb'，典型的拼写错误
+244,ProviderNumber,x00x5,FI,stage1,True,FI,0.9,,ProviderNumber应为5位数字，当前值包含字母x，不符合格式
+244,Score,empty,MV,stage1,True,MV,0.95,,显式缺失哨兵'empty'，表示无数据
+244,Stateavg,ax_ami-1,FI,stage1,True,T,0.95,al_ami-1,前缀'ax'应为'al'以匹配州缩写，且与MeasureCode一致，应为'al_ami-1'
+244,Condition,heart attack,DIST,stage2,False,NONE,0.9,,标准值'heart attack'与正常样本中正确拼写一致，且与同行MeasureName一致，前序标记为误报
+245,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵'empty'，表示无数据
+245,EmergencyService,yes,DIST,stage2,False,NONE,1.0,,值'yes'存在于正常样例中，非错误
+246,Score,empty,MV,stage1,False,NONE,0.98,,Sample为'0 patients'，无有效数据，Score='empty'表示无评分，符合上下文，非错误
+246,EmergencyService,yes,DIST,stage2,False,NONE,0.99,,'yes'是正常样例之一，且与医院信息一致，无错误
+247,PhoneNumber,xx46x66221,FI,stage1,True,FI,0.95,,含字母'x'，不符合北美电话号码纯数字格式
+247,HospitalOwner,governxent - federal,FI,stage1,True,T,0.97,government - federal,'governxent'为'government'的拼写错误，与标准枚举'government - federal'差一个字母
+247,Score,empty,MV,stage1,False,NONE,1.0,,样本量为0，分数合理缺失，'empty'表示缺失哨兵，非错误
+248,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0，Score无法计算，'empty'是合理的缺失哨兵，非错误。
+248,Stateavg,xl_xmi-5,FI,stage1,True,T,0.98,al_ami-5,值'xl_xmi-5'不符合'al_'前缀格式，且'xmi'疑为'ami'的拼写错误，结合MeasureCode 'ami-5'，应修正为'al_ami-5'。
+249,Score,empty,MV,stage1,True,MV,0.95,,"Value 'empty' is a missing value sentinel, not a valid percentage score. Sample is 0 patients, so score is unavailable, but should be null."
+249,Condition,heart attack,DIST,stage2,False,NONE,0.98,,"Value 'heart attack' is a correct medical condition, consistent with MeasureCode ami-7a and normal samples include this exact value."
+250,Score,empty,MV,stage1,True,MV,0.95,,Score 为 'empty' 明确是缺失值哨兵，且同行 Sample 为 '0 patients' 印证无数据。
+250,Stateavg,al_ami-8a,DIST,stage2,False,NONE,0.98,,Stateavg 'al_ami-8a' 由 State 'al' 与 MeasureCode 'ami-8a' 组合而成，完全符合跨列一致性，前序误报。
+252,Score,89x,FI,stage1,True,FI,0.95,89%,不符合百分比格式，应为89%，误输入为x
+252,CountyName,xlarke,T,stage1,True,T,0.95,clarke,AL州Thomasville在Clarke County，与clarke编辑距离1，疑为typo
+253,ProviderNumber,1xx15,FI,stage1,True,FI,0.95,10015,"Contains non-digit characters 'xx', should be a 5-digit number; most similar to normal samples like '10015' assuming 'xx' is a placeholder for '00'."
+256,Condition,xneumonia,FI,stage1,True,T,0.95,pneumonia,该值'xneumonia'与正确条件'pneumonia'仅有首字母差异，显然是拼写错误（typo）。
+256,Score,x6%,FI,stage1,True,FI,0.9,96%,百分比格式应为数字后跟'%'，'x6%'包含非法字符'x'，最可能为'96%'的误输入（x可能为9的OCR错误）。
+256,MeasureName,pneumonxa patxents whose inxtxal emergency room blood culture was performed prxor to the admxnxstratxon of the fxrst hospxtal dose of antxbxotxcs,VAD,stage1,True,T,0.99,pneumonia patients whose initial emergency room blood culture was performed prior to the administration of the first hospital dose of antibiotics,字符串中多个字母'i'被错误替换为'x'，导致整个描述出现系统性拼写错误，与正确的MeasureCode 'pn-3b'对应名称不一致。
+258,EmergencyService,yes,DIST,stage2,False,NONE,1.0,,值 'yes' 是 EmergencyService 列的常见正常值，且与同行其他信息无冲突，前序标记为误报。
+259,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,Value 'yes' is normal for this field; present in normal samples; no cross-column inconsistency.
+259,Stateavg,al_pn-6,DIST,stage2,False,NONE,0.95,,Pattern 'State_MeasureCode' matches row: State='AL' + MeasureCode='pn-6' gives 'al_pn-6'; consistent across columns.
+260,Address,33700 hxghway 43,T,stage1,True,T,0.95,33700 highway 43,'hxghway' 与高频值 'highway' 编辑距离为1，明显为拼写错误，且符合地址模式
+261,PhoneNumber,334x3xx221,FI,stage1,True,FI,0.99,,包含字母'x'，不符合北美电话号码全数字格式
+261,Score,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵'empty'，缺少应有百分比数据
+261,Sample,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵'empty'，缺少应有患者计数数据
+264,Address,33700 highway x3,T,stage1,True,T,0.95,33700 highway 43,高频地址为'33700 highway 43'，且医院真实地址对应此值，当前值'x3'应为'43'的笔误。
+264,MeasureCode,scxp-xnf-3,T,stage1,True,T,0.97,scip-inf-3,与其他列如MeasureName及Stateavg中的'scip-inf-3'不一致，'scxp-xnf-3'明显为'scip-inf-3'的拼写错误。
+265,Score,empty,MV,stage1,False,NONE,0.95,,与样本列为0一致，空值是合理缺失，非错误
+265,ZipCode,36784,DIST,stage2,False,NONE,0.98,,"邮编36784对应城市Thomasville, AL，与City和State一致，为真实有效邮编"
+265,City,thomasville,DIST,stage2,False,NONE,0.98,,城市名'Thomasville'与邮编和州一致，且出现在正常样例中，非错误
+266,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,Typo for 'acute care hospitals'
+267,ZipCode,x6784,FI,stage1,True,FI,0.95,36784,"ZipCode should be a 5-digit number; 'x6784' likely a typo for 36784, matching Thomasville, AL"
+269,Condition,heart attack,DIST,stage2,False,NONE,0.95,,Value is a valid condition and matches MeasureName; not a typo.
+269,Stateavg,al_axi-1,DIST,stage2,True,T,0.9,al_ami-1,'axi' appears to be a typo for 'ami' based on MeasureCode and normal samples.
+270,City,alabaster,DIST,stage2,False,NONE,0.95,,"alabaster is a valid city in Alabama, and the lowercase format is consistent with other city values in the dataset."
+270,PhoneNumber,2056208100,DIST,stage2,False,NONE,1.0,,The phone number appears in the provided normal samples and follows the expected format.
+271,HospitalName,shelby baptist medical center,DIST,stage2,False,NONE,0.95,,真实存在的医院名称，与同行CountyName (shelby) 语义一致，符合命名习惯
+271,PhoneNumber,2056208100,DIST,stage2,False,NONE,0.99,,该值出现在正常样例中，是合法的10位数字电话号码，非异常
+272,Condition,heart attack,DIST,stage2,False,NONE,0.95,,Value is correct and consistent with MeasureName; normal samples include this exact value.
+273,ProviderNumber,1xx16,FI,stage1,True,FI,0.95,,包含字母'x'，违反该列全数字5位格式
+273,HospitalName,shelby baptist medical center,DIST,stage2,False,NONE,0.9,,名称与县名'Shelby'一致，无拼写或格式错误，前序标记可能误报
+274,Score,empty,MV,stage1,True,MV,0.95,,"Score is 'empty' while Sample is 0 patients, indicating missing value."
+274,Condition,heart attack,DIST,stage2,False,NONE,0.95,,Condition 'heart attack' is a valid value and matches the MeasureCode AMI-7a.
+275,Address,1000 fixst stxeet noxth,VAD,stage1,True,T,1.0,1000 first street north,明显的拼写错误：'fixst' 应为 'first'，'stxeet' 应为 'street'，'noxth' 应为 'north'，且与 ProviderNumber 10016 的历史地址一致。
+278,State,xl,VAD,stage1,True,T,0.95,al,State应为AL（阿拉巴马），与City（alabaster）、ZipCode（35007）、CountyName（shelby）及Stateavg前缀（al）一致，'xl'与'al'仅一字之差，属typo。
+278,HospitalName,shelby baptist medical center,DIST,stage2,False,NONE,0.9,,医院名与CountyName (shelby) 吻合，符合本地命名习惯，无跨列矛盾，仅为分布模型误报。
+279,Condition,xeart failure,FI,stage1,True,T,0.95,heart failure,'xeart' is a typo for 'heart'
+279,MeasureCode,hf-4,DIST,stage2,False,NONE,0.9,,"Value 'hf-4' appears in normal samples, valid code"
+280,HospitalType,acutexcarexhospitals,FI,stage1,False,NONE,0.95,,该值出现在正常样本列表中，是 acute care hospitals 的常见变体，不属于格式错误。
+281,MeasureName,pnxumonia patixnts whosx initial emxrgxncy room blood culturx was pxrformxd prior to thx administration of thx first hospital dosx of antibiotics,VAD,stage1,True,T,0.95,pneumonia patients whose initial emergency room blood culture was performed prior to the administration of the first hospital dose of antibiotics,明显的拼写错误，多处字母被替换（如 pnxumonia->pneumonia），与标准 MeasureName 差异仅由字符错误导致。
+281,HospitalName,shelby baptist medical center,DIST,stage2,False,NONE,0.9,,医院名称与所在地 CountyName 一致，无拼写或格式问题，前序标记为误报。
+281,PhoneNumber,2056208100,DIST,stage2,False,NONE,1.0,,该号码出现在正常样例中，因此为正常值，前序标记为误报。
+283,ZipCode,3x007,FI,stage1,True,T,0.95,35007,"Alabaster, AL的邮政编码应为35007，'3x007'中'x'疑似'5'的键入错误。"
+290,ZipCode,x5007,FI,stage1,True,FI,0.98,35007,"ZipCode 'x5007' 不是5位数字，正常样例为纯数字；且 City='alabaster', State='al' 对应的有效邮编为35007，'x' 可能是 '3' 的误写。"
+290,MeasureName,all heart surgerx patients whose blood sugar (blood glucose) is kept under good control in the daxs right after surgerx,VAD,stage1,True,T,0.99,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,文本中 'surgerx'、'daxs' 均为拼写错误（typo），与同 MeasureCode 的正常值对比应为 'surgery'、'days'；跨列依赖本身无误，错误本质是拼写。
+293,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,当前值'acuxe care hospixals'与正确值'acute care hospitals'仅存在少量字符差异，为拼写错误（typo），而非格式错误。
+294,Score,empty,MV,stage1,True,MV,1.0,,值为'empty'，是明确的缺失哨兵，Score应为百分比，缺失值
+294,Sample,empty,MV,stage1,True,MV,1.0,,值为'empty'，是明确的缺失哨兵，Sample应为患者计数，缺失值
+294,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名拼写规范，与城市Birmingham、州AL及ZipCode一致，无错误迹象，前序标记为误报
+294,ZipCode,35233,DIST,stage2,False,NONE,0.95,,邮政编码35233对应阿拉巴马州伯明翰，且正常样本中包含该值，跨列一致，无错误
+295,Score,empty,MV,stage1,True,MV,0.99,,缺失哨兵'empty'表示数值缺失
+295,Sample,empty,MV,stage1,True,MV,0.99,,缺失哨兵'empty'表示数值缺失
+295,Address,1720 univxrsity blvd,T,stage1,True,T,0.99,1720 university blvd,'univxrsity'应为'university'，与相同地址高频值一致
+295,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,"名称与地址(1720 University Blvd, Birmingham, AL)吻合，真实存在，分布异常系误报"
+296,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'，是缺失哨兵，应视为缺失值。
+296,Sample,empty,MV,stage1,True,MV,0.95,,值为'empty'，是缺失哨兵，应视为缺失值。
+296,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名称为真实存在的医院，地址所在城市伯明翰，无拼写错误，与同行其他列一致，正常样本中包含类似医院名。
+296,ZipCode,35233,DIST,stage2,False,NONE,0.95,,邮政编码与城市伯明翰、州AL匹配，且在正常样本中出现，无错误。
+297,Score,empty,MV,stage1,True,MV,1.0,,Score值为'empty'，是缺失值占位符，应为百分比分数
+297,Sample,empty,MV,stage1,True,MV,1.0,,Sample值为'empty'，是缺失值占位符，应为患者计数
+297,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名称在阿拉巴马州伯明翰市真实存在，与上下文一致，无拼写错误
+297,ZipCode,35233,DIST,stage2,False,NONE,0.9,,ZipCode '35233' 与City 'birmingham'和State 'al'匹配，且出现在正常样例中
+298,Score,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵'empty'。
+298,Sample,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵'empty'。
+298,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,有效的医院名称，与城市、州上下文一致，仅因少见被标记。
+298,ZipCode,35233,DIST,stage2,False,NONE,0.95,,正确的邮政编码，与城市、州一致，且出现在正常样本中。
+299,Score,empty,MV,stage1,True,MV,1.0,,缺失值哨兵'empty'，非百分比数字。
+299,Sample,empty,MV,stage1,True,MV,1.0,,缺失值哨兵'empty'，非患者计数格式。
+299,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名称真实存在，与城市/州匹配，分布差异可能因罕见机构。
+299,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,电话号码格式正确，区号与伯明翰地区一致，未见错误。
+300,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵 'empty'，确认为缺失值
+300,Sample,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵 'empty'，确认为缺失值
+300,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,医院名称格式合理，无拼写错误，与同行其他列无矛盾，属于误报
+300,ZipCode,35233,DIST,stage2,False,NONE,0.95,,与正常样例一致，且与 City 'birmingham' 及 State 'al' 匹配，属于误报
+301,Score,empty,MV,stage1,True,MV,1.0,,"Value is 'empty' sentinel, indicating missing data."
+301,Sample,empty,MV,stage1,True,MV,1.0,,"Value is 'empty' sentinel, indicating missing data."
+301,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,1.0,,"Matches known address (1720 University Blvd, Birmingham AL 35233) and is consistent with other columns; distribution flag false positive."
+301,ZipCode,35233,DIST,stage2,False,NONE,1.0,,"Valid zip code for Birmingham, AL, appearing in normal samples; distribution flag false positive."
+302,Score,empty,MV,stage1,True,MV,0.95,,缺失哨兵'empty'，正常应为百分比如'95%'
+302,Sample,empty,MV,stage1,True,MV,0.95,,缺失哨兵'empty'，正常应为患者计数如'12 patients'
+302,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,Callahan Eye Foundation Hospital 是伯明翰真实医院，与State=al、City=birmingham一致，非错误
+302,ZipCode,35233,DIST,stage2,False,NONE,0.95,,35233是伯明翰有效邮编，且在正常样例中出现，与City、State匹配
+303,Score,empty,MV,stage1,True,MV,0.99,,Missing value placeholder 'empty' instead of a percentage score.
+303,Sample,empty,MV,stage1,True,MV,0.99,,Missing value placeholder 'empty' instead of a patient count.
+303,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,"Name is correct and consistent with address (1720 University Blvd, Birmingham AL 35233); lowercase is the dataset convention."
+303,ZipCode,35233,DIST,stage2,False,NONE,0.95,,Zip code 35233 matches the city/state/address and appears in the normal samples; no error.
+304,Score,empty,MV,stage1,True,MV,0.98,,"Value 'empty' is a missing-value sentinel, not a valid percentage."
+304,Sample,empty,MV,stage1,True,MV,0.98,,"Value 'empty' is a missing-value sentinel, not a valid patient count."
+304,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.8,,"Name appears to be a legitimate hospital in Birmingham, AL; low-frequency but not an error."
+304,ZipCode,35233,DIST,stage2,False,NONE,0.9,,"ZipCode 35233 is present in the normal samples and matches Birmingham, AL."
+305,Score,empty,MV,stage1,True,MV,1.0,,值为空哨兵'empty'，正常应为百分比格式
+305,Sample,empty,MV,stage1,True,MV,1.0,,值为空哨兵'empty'，正常应为如'0 patients'的格式
+305,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.7,,医院名称可能真实存在，分布异常但无明确错误
+305,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,10位数字，区号205有效，格式符合
+306,Score,empty,MV,stage1,True,MV,0.98,,值为'empty'，是明确的缺失哨兵，与正常百分数不符
+306,Sample,empty,MV,stage1,True,MV,0.98,,值为'empty'，是明确的缺失哨兵，与正常患者数格式不符
+306,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,全小写与行内其他文本列一致，正常样例中也存在小写名称，无拼写错误
+306,ZipCode,35233,DIST,stage2,False,NONE,1.0,,值'35233'出现在正常样例中，为典型值
+307,Score,empty,MV,stage1,True,MV,0.99,,"Score is the missing value sentinel 'empty', indicating unrecorded percentage."
+307,Sample,empty,MV,stage1,True,MV,0.99,,"Sample is the missing value sentinel 'empty', indicating unrecorded patient count."
+307,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.9,,"HospitalName is all lowercase but consistent with other text columns in the same row (City, State, etc.), not an error."
+307,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.9,,"PhoneNumber is a 10-digit number with area code 205 matching Birmingham, AL; format aligns with normal samples."
+308,Score,empty,MV,stage1,True,MV,0.99,,'empty' 是明显的缺失占位符，该列应存储百分比数值
+308,Sample,empty,MV,stage1,True,MV,0.99,,'empty' 是缺失哨兵，不符合患者数量格式
+308,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.99,,合法的医院名称，拼写正常，存在于此州（阿拉巴马）
+308,ZipCode,35233,DIST,stage2,False,NONE,0.99,,有效邮编，与城市伯明翰一致，且在正常样例中
+309,Score,empty,MV,stage1,True,MV,0.95,,值为缺失值哨兵'empty'，且正常样例均为百分比数值。
+309,Sample,empty,MV,stage1,True,MV,0.95,,值为缺失值哨兵'empty'，且正常样例均为患者数量。
+309,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,名称合理，与样例风格一致，无拼写错误，上下文无冲突。
+309,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.95,,号码格式正确，区号205与州AL匹配，无异常。
+310,Score,empty,MV,stage1,True,MV,1.0,,值为'empty'，是明确的缺失哨兵，且Score应为百分比格式，正常样例均为百分比字符串。
+310,Sample,empty,MV,stage1,True,MV,1.0,,值为'empty'，是明确的缺失哨兵，且Sample应为患者数量，正常样例均为数字+patients格式。
+310,HospitalName,callahan eye foundation hospital,DIST,stage2,False,NONE,0.95,,Callahan Eye Foundation Hospital是伯明翰真实存在的医院，与同行City/State一致，名称无明显拼写或格式错误，分布异常可能是模型未见过该名称所致。
+310,PhoneNumber,2053258100,DIST,stage2,False,NONE,0.95,,电话号码2053258100为10位数字，区号205与阿拉巴马州伯明翰地区匹配，无格式错误，同行其他信息一致，分布异常可能是频率低所致。
+311,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,值在正常样例中，且与同行MeasureCode一致，非错误。
+311,City,axxistox,VAD,stage1,True,T,1.0,anniston,与正确值anniston仅有少量字符差异，且与State、ZipCode一致，应为拼写错误。
+312,Condition,children s asthma care,FI,stage1,False,NONE,0.9,,值出现在正常样例中，且与同行MeasureCode、MeasureName一致，无错误。
+312,CountyName,calhoxn,T,stage1,True,T,0.95,calhoun,"拼写错误：Anniston, AL 对照的县名应为 Calhoun，编辑距离为1。"
+313,HospitalOwner,prxprietary,FI,stage1,True,T,0.95,proprietary,"Typo: 'prxprietary' is a misspelling of 'proprietary', which is a valid category in the normal samples."
+314,ProviderNumber,100x8,FI,stage1,True,FI,0.95,,"ProviderNumber should be all digits; '100x8' contains letter 'x', violating the expected 5-digit numeric format."
+316,Sample,29 xatients,FI,stage1,True,T,0.95,29 patients,xatients is a typo for patients
+316,Address,301xeastx18thxst,VAD,stage1,True,VAD,0.99,301 east 18th st,"Based on ProviderNumber 10038, address should be '301 east 18th st'; current value has x instead of spaces"
+318,EmergencyService,xes,VAD,stage1,True,T,0.9,yes,Likely a typo for 'yes'
+318,City,anniston,DIST,stage2,False,NONE,0.95,,"City 'anniston' is correct and consistent with State AL and County Calhoun, appears in normal samples"
+319,MeasureName,heart attack patients given pci within 90 minutes of arrival,DIST,stage2,False,NONE,0.98,,值与同行Condition和MeasureCode一致，语义正确，无格式或拼写错误
+319,Stateavg,al_ami-8a,DIST,stage2,False,NONE,0.98,,'al_ami-8a'符合州缩写+度量代码的规范，且与State和MeasureCode一致，虽未出现在正常样例中但逻辑合理
+321,PhoneNumber,256235x900,FI,stage1,True,T,0.95,2562358900,Contains letter 'x' instead of digit; likely typo for '2562358900' similar to normal sample and same area code.
+321,CountyName,calhoun,DIST,stage2,False,NONE,0.99,,"Calhoun is the correct county for city Anniston, state AL, and zip 36201; consistent with row context."
+324,CountyName,caxhoun,T,stage1,True,T,0.99,calhoun,当前值 'caxhoun' 与阿拉巴马州真实县名 'Calhoun' 仅一字之差（x 应为 l），且城市 Anniston 和邮编 36201 均属 Calhoun 县，确认为拼写错误。
+325,ZipCode,36x01,FI,stage1,True,FI,0.95,36201,包含字母'x'，不符合5位数规范，最可能为Anniston AL的常用邮编36201
+325,CountyName,calhoun,DIST,stage2,False,NONE,0.9,,与同行City/State一致，Anniston位于Calhoun县，属误报
+327,EmergencyService,yex,VAD,stage1,False,NONE,0.9,,该值在正常样本中存在，且同行数据（如Stateavg与State、MeasureCode一致）无跨列不一致，前序基于历史分布的依赖不构成硬约束。
+332,ZipCode,3x305,FI,stage1,True,FI,0.9,36305,包含非法字符'x'，正常应为5位数字，根据城市和州推测可能为36305
+332,HospitalOwner,proxrietary,FI,stage1,True,T,0.99,proprietary,与标准枚举值'proprietary'仅差一个字母'x'，明显拼写错误
+332,EmergencyService,yex,VAD,stage1,True,T,0.9,yes,与同ProviderNumber历史多数值'yes'仅差一个字母，疑为笔误
+333,EmergencyService,yes,DIST,stage2,False,NONE,0.99,,"Value 'yes' is a common valid response for emergency services, matches normal samples."
+334,Stateavg,al_pnx2,FI,stage1,True,T,0.95,al_pn-2,根据MeasureCode pn-2与正常样例格式al_xxx-x，当前值多了x且缺连字符，应为'al_pn-2'
+334,Address,4370xwestxmainxstreet,VAD,stage1,True,T,0.95,4370 west main street,根据同ProviderNumber多数记录，多个'x'应为空格，正确地址为'4370 west main street'
+336,Score,x00%,FI,stage1,True,FI,0.95,100%,"Value contains non-numeric character, does not match pattern digit(s)%."
+336,Sample,77 patients,DIST,stage2,False,NONE,0.7,,"77 patients is a valid format, likely a correct but larger sample size; distribution outlier but not a clear error given context."
+337,HospitalName,floxers hospital,T,stage1,True,T,0.95,flowers hospital,"与已知医院名'flowers hospital'仅一字之差，且City和State匹配Dothan, AL的Flowers Hospital。"
+337,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.9,,'proprietary'是正常样本中的合法值，且与HospitalType等列无冲突，前序标记为误报。
+338,Sample,112 patients,DIST,stage2,False,NONE,0.9,,"112 patients is a plausible sample size for a hospital; format is correct, and no cross-column inconsistency is evident."
+340,ZipCode,x6x05,FI,stage1,True,FI,0.95,36305,"Contains letters 'x', should be 5-digit number. Likely typo for Dothan, AL zip code 36305."
+340,Stateavg,al_scip-card-2,DIST,stage2,False,NONE,0.99,,Value 'al_scip-card-2' matches the pattern State_MeasureCode and appears in normal samples; consistent with State 'al' and MeasureCode 'scip-card-2'.
+342,PhoneNumber,xx479x5000,FI,stage1,True,FI,0.98,,包含非数字字符'x'，不符合北美电话号码纯数字格式，且正常样例均为10位数字
+342,Sample,957 patients,DIST,stage2,True,OTHER,0.6,,样本量957远大于正常样例分布（最大14），与Score=100%可能存在不一致，疑似录入错误
+344,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,Value is a valid hospital owner type and appears in normal samples; no cross-column inconsistency.
+344,Sample,165 patients,DIST,stage2,False,NONE,0.9,,"Format is valid (number + 'patients'), and a sample size of 165 is plausible for this measure; no evidence of error beyond distributional rarity."
+345,Sample,1295 patients,DIST,stage2,True,FI,0.9,,Value '1295 patients' far exceeds typical sample size range (0-14 patients) observed in normal samples; likely a format error or wrong value.
+346,CountyName,housxon,T,stage1,True,T,0.95,houston,"疑似拼写错误，与同列高频值'houston'编辑距离为1，且地址Dothan, AL 对应Houston County，应为'houston'。"
+346,MeasureName,surgery pxtients whose doctors ordered trextments to prevent blood clots xfter certxin types of surgeries,VAD,stage1,True,T,0.99,surgery patients whose doctors ordered treatments to prevent blood clots after certain types of surgeries,"多个明显拼写错误：'pxtients','trextments','xfter','certxin'，对照正确MeasureName文本应为'surgery patients whose doctors ordered treatments to prevent blood clots after certain types of surgeries'。"
+347,Stateavg,al_scipxvtex2,FI,stage1,True,FI,0.9,al_scip-vte-2,"Format does not match expected pattern with hyphen, likely a misconstruction of 'al_scip-vte-2' based on State and MeasureCode"
+347,MeasureName,patients who got treatment  at the right time (within 24 hours before or after their surgery) to help prevent blood clots after certain types of surgery,DIST,stage2,False,NONE,0.85,,Measure name matches MeasureCode SCIP-VTE-2; extra space between words is a common artifact in the dataset and not a semantic error
+349,MeasureCode,amix2,FI,stage1,True,T,0.95,ami-2,Value looks like a typo for 'ami-2'; Stateavg 'al_ami-2' confirms expected code 'ami-2'.
+349,CountyName,jefferson,DIST,stage2,False,NONE,0.9,,'jefferson' is a valid county in AL and appears in normal samples; not an error.
+349,HospitalName,st vincents hospital,DIST,stage2,False,NONE,0.9,,Value is semantically consistent with address and normal samples include similar names; likely a legitimate variant.
+350,EmergencyService,yxs,VAD,stage1,False,NONE,0.95,,'yxs'出现在该列的正常样本中，无跨列矛盾，可能为合法编码，前序标记为误报。
+350,Address,810 st vxncents drxve,DIST,stage2,True,T,0.98,810 st vincents drive,与医院名'st vincents hospital'不一致，'vxncents'和'drxve'分别为'vincents'和'drive'的拼写错误。
+352,City,birmingham,DIST,stage2,False,NONE,0.95,,"'birmingham' is a valid city, appears in normal samples, and matches State 'AL' and ZipCode '35205'."
+352,ZipCode,35205,DIST,stage2,False,NONE,0.95,,"'35205' is a valid ZIP code for Birmingham, AL, consistent with City and State. Absence from normal samples does not indicate error."
+353,CountyName,morgan,DIST,stage2,False,NONE,0.95,,Morgan是阿拉巴马州的一个县，与City/State/Zip匹配
+353,HospitalOwner,government - hospital district or authority,DIST,stage2,False,NONE,0.99,,该值存在于正常样例列表中，是常见的医院所有权类型
+354,Sample,1x patients,FI,stage1,True,FI,0.95,1 patients,"Extra 'x' in number, should be '1 patients'."
+354,Condition,heart attack,DIST,stage2,False,NONE,0.98,,"Correct value 'heart attack' is a normal condition, no error."
+356,HospitalOwner,prxprietary,FI,stage1,True,T,0.99,proprietary,Typo of 'proprietary' based on normal samples and standard value.
+356,State,ax,VAD,stage1,True,VAD,0.95,al,Inconsistent with ProviderNumber 10086 (majority state 'al') and Stateavg 'al_ami-3'.
+357,Condition,heart attack,DIST,stage2,True,OTHER,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+359,Condition,heart attack,DIST,stage2,False,NONE,0.95,,"值在正常样例中，且与同行其他列(MeasureCode, MeasureName)语义一致，无明显错误。"
+359,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,值在正常样例中，且上下文无矛盾，是合法类别。
+360,ProviderNumber,100x6,FI,stage1,True,FI,1.0,,包含字母'x'，所有正常样例均为5位纯数字。
+360,Score,empty,MV,stage1,True,MV,1.0,,'empty'是显式缺失哨兵字符串，应表示为空值。
+363,Address,1530xuxsxhighwayx43,VAD,stage1,True,T,0.95,1530 u s highway 43,地址值含有多个异常字符 'x'，与同 ProviderNumber 的历史正常地址 '1530 u s highway 43' 不符，属于典型的 OCR 或录入拼写错误。
+366,ZipCode,3xx94,FI,stage1,True,FI,0.98,35594,包含字母'x'，不符合5位数字格式；且根据City='winfield'与State='al'，正确邮编应为35594。
+366,Condition,pnxumonia,FI,stage1,True,T,0.97,pneumonia,'pnxumonia'是'pneumonia'的明显拼写错误，正常值包括'pneumonia'。
+367,City,winfielx,T,stage1,True,T,0.95,winfield,"与高频值'winfield'编辑距离为1，且Winfield, AL确实存在于Marion县，明显拼写错误"
+367,CountyName,marion,DIST,stage2,False,NONE,0.9,,'marion'出现在正常样例中，且与State=AL和修复后的City=Winfield完全匹配，分布模型误报
+369,Condition,pnexmonia,FI,stage1,True,T,0.99,pneumonia,当前值'pnexmonia'与正常值'pneumonia'拼写相近，且同行MeasureName明确指向肺炎，应为typo
+369,Stateavg,al_pn-6,DIST,stage2,False,NONE,0.99,,Stateavg由State和MeasureCode拼接而成，'al_pn-6'与同行State 'al'、MeasureCode 'pn-6'完全一致，无错误
+370,Stateavg,alxpn-7,FI,stage1,True,T,0.95,al_pn-7,"Should be al_pn-7 per MeasureCode and State, likely typo with 'x' instead of underscore"
+370,CountyName,marion,DIST,stage2,False,NONE,0.9,,Appears in normal samples and matches City/State context
+370,HospitalName,northwest medical center,DIST,stage2,False,NONE,0.9,,"Appears in normal samples, no evidence of error"
+373,Stateavg,al_sxip-inf-2,DIST,stage2,True,T,0.95,al_scip-inf-2,"Stateavg should be al_scip-inf-2 based on measure code SCIP-INF-2, but contains typo 'sxip' instead of 'scip'"
+374,EmergencyService,yex,VAD,stage1,True,T,0.95,yes,"Value 'yex' appears to be a typo of 'yes', as ProviderNumber 10086 typically has EmergencyService='yes' (96% in training)."
+375,ZipCode,3xx94,FI,stage1,True,FI,0.95,35594,"Contains non-numeric 'xx', normal samples are 5-digit numbers; City=winfield, State=AL maps to 35594."
+375,Score,empty,MV,stage1,False,NONE,0.9,,"Sample is '0 patients', so a missing score indicator like 'empty' is expected and not an actual error."
+375,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,'proprietary' is present in the provided normal samples; flagged distribution anomaly is likely a false positive.
+378,Score,x5%,FI,stage1,True,T,0.9,95%,"Value 'x5%' appears to be a typo for '95%', likely a miskey of 'x' instead of '9'."
+380,MeasureName,heaxt attack patients given aspixin at dischaxge,VAD,stage1,True,VAD,0.95,heart attack patients given aspirin at discharge,多个拼写错误导致与MeasureCode='ami-2'的标准名称不符，属于跨列依赖违反
+380,MeasureCode,ami-2,DIST,stage2,False,NONE,0.99,,ami-2是合法代码，与Condition=heart attack一致，且出现在正常样例中，前序标记为误报
+381,PhoneNumber,25x47x7xx0,FI,stage1,True,FI,1.0,,"Value contains 'x' characters, not a valid 10-digit North American phone number as expected from normal samples."
+384,PhoneNumber,25x47x7xx0,FI,stage1,True,FI,1.0,,包含字母'x'，不符合纯数字电话号码格式
+384,Score,empty,MV,stage1,True,MV,1.0,,'empty'为缺失哨兵，应视为缺失值
+384,HospitalName,univ ox south alabama medical center,T,stage1,True,T,0.95,univ of south alabama medical center,与高频正常值仅'ox'和'of'一字之差，明显拼写错误
+385,HospitalName,xniv of soxth alabama medical center,T,stage1,True,T,0.95,univ of south alabama medical center,明显的拼写错误：'xniv'应为'univ'，'soxth'应为'south'，与正常名称'Univ of South Alabama Medical Center'一致，且与城市Mobile、州AL匹配。
+385,ZipCode,36617,DIST,stage2,False,NONE,0.98,,邮编36617是阿拉巴马州Mobile的有效邮编，与同行City及State一致，无错误。
+386,PhoneNumber,25x47x7xx0,FI,stage1,True,FI,1.0,,"Contains letters in a field that should be all digits, violating phone number format."
+386,Condition,hxart failurx,FI,stage1,True,T,1.0,heart failure,"Typo for 'heart failure', matching MeasureCode hf-1 and patient condition context."
+386,State,xl,VAD,stage1,True,T,1.0,al,"Typo for 'al', consistent with City 'mobile' and ProviderNumber 10087."
+387,Stateavg,al_hx-2,VAD,stage1,True,VAD,0.95,al_hf-2,与同行MeasureCode 'hf-2' 不匹配，应为 'al_hf-2'
+387,MeasureCode,hf-2,DIST,stage2,False,NONE,0.9,,与Condition和MeasureName一致，为有效心力衰竭指标代码，分布异常为误报
+389,MeasureName,heart xailure patients given smoking cessation advice/counseling,T,stage1,True,T,0.95,heart failure patients given smoking cessation advice/counseling,xailure显然是failure的拼写错误，且与同行Condition heart failure及MeasureCode hf-4一致。
+389,EmergencyService,yxs,VAD,stage1,True,T,0.8,yes,yxs与yes编辑距离为1（x→e，s位置不变），应为拼写错误；normal_samples中虽有类似编码，但本医院ProviderNumber多数记录为yes，且急诊服务通常为yes/no，故判断为typo而非合法值。
+391,MeasureCode,pn-xb,FI,stage1,True,T,0.95,pn-3b,与Stateavg中的测量码部分不一致，且正常样本无字母x；Stateavg为al_pn-3b，暗示正确编码为pn-3b。
+391,Stateavg,al_pn-3b,DIST,stage2,False,NONE,0.9,,该值与同行State列(al)一致，且与修正后的MeasureCode(pn-3b)匹配；格式符合州编码_测量码，正常样本中存在类似值(al_pn-4)。
+393,PhoneNumber,33x361x267,FI,stage1,True,FI,0.9,334361267,包含非法字符'x'，长度不足10位，与北美电话号码格式不符；基于同州正常样例推测区号334，完整号码可能为334361267。
+393,Address,124xsxmemorialxdr,VAD,stage1,True,T,0.95,124 s memorial dr,与同医院多数地址不符，'x'应为空格，实际应为'124 s memorial dr'，属于拼写错误。
+394,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'，是典型的缺失哨兵，且同行样本数为0，该分数应缺失
+394,MeasureCode,ami-4,DIST,stage2,False,NONE,0.9,,与Condition、MeasureName及Stateavg一致，属于合法的AMI指标代码，不是错误
+396,Score,empty,MV,stage1,True,MV,0.98,,Score值为'empty'是缺失哨兵，非百分比，确认为缺失值。
+396,Condition,heart attack,DIST,stage2,False,NONE,0.99,,Condition值为'heart attack'，与正常样例中正确拼写一致，不是错误。
+397,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is 0 patients, so Score missing is expected and not an error."
+398,State,al,DIST,stage2,False,NONE,0.95,,州代码“al”与同行城市、邮编一致，是有效的阿拉巴马州缩写，在上下文中无矛盾，应为误报。
+400,Condition,hxart failurx,FI,stage1,True,T,0.95,heart failure,明显的拼写错误，'hxart failurx'应为'heart failure'，与Stateavg中的'hf'及MeasureCode、MeasureName一致
+402,State,ax,VAD,stage1,True,T,0.95,al,"City, CountyName, ZipCode, and ProviderNumber history all point to AL; 'ax' is likely a typo of 'al'."
+402,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.95,,Value appears in normal samples and is consistent with the row context.
+405,Score,x4%,FI,stage1,True,FI,0.95,94%,格式错误：百分比应以数字开头，'x4%' 疑为 OCR 误识别，常见值 '94%' 与正常样例一致。
+406,ZipCode,3x0x7,FI,stage1,True,FI,0.95,36067,"Contains non-numeric 'x', violates 5-digit zip code format; Prattville, AL uses 36066 or 36067."
+408,ProviderNumber,x0x08,FI,stage1,True,FI,0.95,10008,包含非数字字符'x'，违背纯5位数字格式；最可能正确值为'10008'
+408,HospitalName,prattville baptist hospital,DIST,stage2,True,T,0.9,prattville baptist hospital,城市名正确拼写为Prattville（双t），当前缺少一个't'，系拼写错误
+409,MeasureCode,scipxinfx1,FI,stage1,True,FI,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+409,Condition,surgical infection prevention,DIST,stage2,True,OTHER,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+410,EmergencyService,yxs,VAD,stage1,False,NONE,0.9,,值 'yxs' 出现在该列的 normal_samples 中，且整行上下文无矛盾，ProviderNumber 条件依赖仅反映多数情况，不排除个别变异，故判定为误报。
+410,HospitalName,prattville baptist hospital,DIST,stage2,False,NONE,0.9,,全小写与同行 City、State 等列风格一致，normal_samples 中虽有大写但本条无跨列异常，无充分理由判定为错误。
+411,HospitalType,acute care hosxitals,FI,stage1,True,T,0.95,acute care hospitals,"'hosxitals' is a typo for 'hospitals', matching normal samples."
+411,Score,1xx%,FI,stage1,True,FI,0.9,,'1xx%' is not a valid percentage; missing numeric digits.
+411,Address,124 s mxmorial dr,T,stage1,True,T,0.99,124 s memorial dr,"'mxmorial' is a typo for 'memorial', confirmed by high-frequency correct value."
+412,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,值在正常样例列表中，无跨列矛盾，误报。
+412,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,值与正常样例一致，无跨列矛盾，误报。
+413,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.9,acute care hospitals,Typo of 'acute care hospitals'; 'acuxe care hospixals' appears as a common misspelling.
+413,Sample,125 patixnts,FI,stage1,True,T,0.95,125 patients,Typo 'patixnts' should be 'patients'.
+413,CountyName,franklin,DIST,stage2,False,NONE,0.95,,"Franklin County is consistent with City Russellville, State AL, and ZipCode 35653."
+415,Address,315 w hickxry st,T,stage1,True,T,0.95,315 w hickory st,'hickxry' 疑似 'hickory' 的拼写错误，与高频值及地理常识一致。
+415,CountyName,tallaxega,T,stage1,True,T,0.95,talladega,"'tallaxega' 与正确县名 'talladega' 编辑距离1，且 Sylacauga, AL 位于 Talladega County。"
+417,Score,empty,MV,stage1,False,NONE,0.95,,Sample为'0 patients'，Score为'empty'表示无数据，是合理的缺失表示，非错误
+417,Condition,heart attack,DIST,stage2,False,NONE,0.95,,'heart attack'是正常值，且与同行MeasureCode、MeasureName一致，非错误
+418,Sample,4 xatients,FI,stage1,True,T,0.98,4 patients,'xatients' 应为 'patients'，与正常格式不符，且同列均为数字+空格+patients
+418,EmergencyService,xo,VAD,stage1,True,VAD,0.94,no,该医院(ProviderNumber=10164)在18条记录中94% EmergencyService为'no'，此处的'xo'与多数记录矛盾
+419,Score,empty,MV,stage1,True,MV,0.99,,"Score should be a percentage, but 'empty' is a missing value placeholder."
+419,Condition,heart attack,DIST,stage2,False,NONE,0.99,,"The value 'heart attack' is a valid condition that matches MeasureCode and MeasureName, and appears in normal samples."
+420,ZipCode,x5150,FI,stage1,True,FI,0.9,35150,包含非数字字符'x'，不符合5位数字格式；疑似'35'笔误为'x5'，城市确认为Sylacauga AL 35150
+420,Score,empty,MV,stage1,True,MV,0.95,,'empty'是缺失值占位符，非真实得分
+420,Address,315 w hickory st,DIST,stage2,False,NONE,0.95,,地址与医院名称和城市匹配，为真实地址，分布模型误报
+426,Score,x7%,FI,stage1,True,FI,0.9,97%,Value 'x7%' does not match expected percentage pattern (digits+%); 'x' likely a typo for '9'.
+428,ZipCode,3x1x0,FI,stage1,True,FI,0.95,35150,"ZipCode contains invalid 'x' characters; likely OCR error for '35150' matching City Sylacauga, AL"
+431,Address,315xwxhickoryxst,DIST,stage2,True,FI,0.9,315 w hickory st,Contains multiple 'x' characters; likely intended as '315 w hickory st'.
+432,Stateavg,ak_hf-1,FI,stage1,False,NONE,0.95,,Stateavg由State和MeasureCode派生，当前值ak_hf-1与本行State='ak'及MeasureCode='hf-1'一致，符合跨列依赖。正常样本仅反映阿拉巴马州格式，非错误。
+432,City,anchorage,DIST,stage2,False,NONE,0.95,,城市Anchorage与州AK匹配，是有效城市。正常样本来自其他州，不代表所有合法值。
+432,State,ak,DIST,stage2,False,NONE,0.95,,'ak'是阿拉斯加州标准缩写，且在正常样本中出现，分布差异因数据稀少而非错误。
+433,Stateavg,ak_hf-2,FI,stage1,False,NONE,0.98,,格式为{State}_{MeasureCode}，State为ak，MeasureCode为hf-2，符合行上下文，非错误
+433,State,ak,DIST,stage2,False,NONE,0.98,,阿拉斯加州缩写，与City、ZipCode一致，非错误
+433,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.95,,医院名称与所在州AK对应，无拼写或格式问题
+434,Stateavg,ak_hf-3,FI,stage1,False,NONE,0.99,,Stateavg格式正确: 由州代码ak和MeasureCode hf-3组成，与State=ak一致
+434,MeasureName,heart faxlure patxents gxven ace inhxbxtor or arb for left ventrxcular systolxc dysfunctxon (lvsd),VAD,stage1,True,T,0.99,heart failure patients given ace inhibitor or arb for left ventricular systolic dysfunction (lvsd),"存在多处拼写错误，如faxlure->failure, patxents->patients, gxven->given等"
+434,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.99,,医院名称与State=ak和City=anchorage一致，无错误
+434,City,anchorage,DIST,stage2,False,NONE,0.99,,城市名anchorage与State=ak一致，无错误
+434,State,ak,DIST,stage2,False,NONE,0.99,,State为ak，在正常样例中且与行内其他信息一致
+435,Stateavg,ak_hf-4,FI,stage1,False,NONE,0.95,,Stateavg 以州缩写 'ak' 开头，与同行 State='ak' 一致，且与 MeasureCode 'hf-4' 拼合，格式正确，误报。
+435,State,ak,DIST,stage2,False,NONE,0.95,,State='ak' 与城市 anchorage、zip 99508 匹配，且正常样例中包含 'ak'，为合法州代码。
+435,City,anchorage,DIST,stage2,False,NONE,0.95,,"City='anchorage' 与 State='ak', Zip='99508' 一致，为正确城市名。"
+436,Stateavg,ak_pn-2,FI,stage1,False,NONE,0.95,,Stateavg由State缩写和MeasureCode组合而成，当前值ak_pn-2与State=ak及MeasureCode=pn-2一致，符合预期格式。正常样例均来自AL州故为al_前缀，不同州前缀不同，非错误。
+436,State,ak,DIST,stage2,False,NONE,1.0,,State值ak出现在正常样例中，且与ZipCode 99508（阿拉斯加安克雷奇）及医院名一致，无异常。
+436,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,1.0,,医院名与State=ak及城市Anchorage相符，实际存在Alaska Regional Hospital。正常样例均来自AL州，分布不同属正常偏差。
+437,Stateavg,ak_pn-3b,FI,stage1,False,NONE,0.95,,Stateavg 格式与同行 State (ak) 及 MeasureCode (pn-3b) 一致，符合 '州代码_指标代码' 规范，前序标记因仅以 al 前缀样例比对而误报。
+437,City,anchoraxe,T,stage1,True,T,0.98,anchorage,与同行的 CountyName (anchorage) 和 ZipCode (99508) 不匹配，且与 'anchorage' 仅一字符之差，明显为拼写错误。
+437,State,ak,DIST,stage2,False,NONE,0.95,,State 为 'ak'，与 HospitalName 中的 alaska、Stateavg 前缀 ak 及 CountyName anchorage 均一致，且正常样例包含 'ak'，前序标记为误报。
+438,Stateavg,ak_pn-4,FI,stage1,False,NONE,0.95,,"Value 'ak_pn-4' correctly combines State 'ak' and MeasureCode 'pn-4', matching the expected pattern; prior flagging due to limited normal samples from 'al' only."
+438,State,ak,DIST,stage2,False,NONE,0.99,,"State 'ak' is consistent with City 'anchorage', ZipCode '99508', and area code 907; it is a valid Alaska code and not an error."
+438,City,anchorage,DIST,stage2,False,NONE,0.99,,City 'anchorage' is correct for the given State/AK and other contextual columns; the distribution flag is due to a different sample region (AL).
+439,Stateavg,ak_pn-5c,FI,stage1,False,NONE,0.95,,Stateavg编码格式为州缩写_MeasureCode，ak_pn-5c对应本行State=ak和MeasureCode=pn-5c，完全合理。正常样例均为al_开头系因同列样本均来自阿拉巴马州，不代表格式异常。
+439,State,ak,DIST,stage2,False,NONE,0.99,,ak是阿拉斯加州的标准缩写，且出现在同列正常样例中，无错误。
+439,City,anchorage,DIST,stage2,False,NONE,0.99,,Anchorage是阿拉斯加州城市，本行State=ak，语义一致。正常样例均为阿拉巴马州城市，不构成分布异常。
+440,Stateavg,ak_pn-6,FI,stage1,False,NONE,0.95,,Stateavg值'ak_pn-6'符合该行State='ak'和MeasureCode='pn-6'的组合规则，与正常样例模式一致，非格式错误
+440,State,ak,DIST,stage2,False,NONE,0.9,,'ak'是有效的阿拉斯加州缩写，且出现在正常样例中，城市安克雷奇与之匹配，无跨列矛盾
+440,City,anchorage,DIST,stage2,False,NONE,0.95,,安克雷奇是阿拉斯加州的实际城市，与该行State='ak'一致，仅因训练数据偏向其他州而被误报
+441,Stateavg,ak_pn-7,FI,stage1,False,NONE,0.95,,格式与同行State (ak) 和 MeasureCode (pn-7) 一致，ak_pn-7 是阿拉斯加州肺炎-7指标的正确编码，前序误报因正常样例多来自阿拉巴马 (al_)
+441,State,ak,DIST,stage2,False,NONE,1.0,,ak 是合法的阿拉斯加州缩写，见于正常样例中，仅因稀有被标记，非错误
+441,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.9,,名称拼写正确，全小写风格与正常样例一致，分布异常仅为概率标记，非真实错误
+442,Stateavg,ak_scip-card-2,FI,stage1,False,NONE,0.95,,"Value correctly follows {state_prefix}_{measurecode} pattern with state prefix 'ak' matching row State 'ak'. Normal samples were from Alabama only, causing false FI flag."
+442,State,ak,DIST,stage2,False,NONE,0.98,,'ak' is a valid state code present in normal samples. Distributional flag likely due to limited context.
+442,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.96,,"Hospital name 'alaska regional hospital' is plausible for Anchorage, AK. Normal samples are from Alabama, not representative."
+443,Stateavg,ak_scip-inf-1,FI,stage1,False,NONE,0.99,,Stateavg 格式为 {州缩写}_{MeasureCode}，'ak_scip-inf-1' 与同行 State='ak'、MeasureCode='scip-inf-1' 完美匹配，无格式错误，前序为误报。
+443,State,ak,DIST,stage2,False,NONE,0.99,,State='ak' 是阿拉斯加州标准缩写，与同行 City='anchorage'、ZipCode='99508' 不一致，无任何错误。
+443,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.99,,医院名称合理，无拼写或格式问题，与同行州信息一致，前序分布异常因正常样例来自其他州导致误报。
+444,Sample,521 patiexts,FI,stage1,True,T,0.99,521 patients,"Typo: 'patiexts' should be 'patients', as in normal samples."
+444,Stateavg,ak_scip-inf-2,FI,stage1,False,NONE,0.95,,"Prefix 'ak_' matches State 'ak' and is consistent with MeasureCode 'scip-inf-2', so it's a valid state average code for Alaska."
+444,State,ak,DIST,stage2,False,NONE,0.95,,"'ak' is a valid state abbreviation and matches City 'anchorage', no error."
+444,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.95,,"'alaska regional hospital' is a real hospital in Anchorage, AK, consistent with State 'ak'; anomaly flag is due to sample bias."
+445,Stateavg,ak_scip-inf-3,FI,stage1,False,NONE,0.95,,Stateavg以'ak_'开头与State列一致，是该州该指标的合理编码，非格式错误。
+445,State,ak,DIST,stage2,False,NONE,0.99,,'ak'是有效的阿拉斯加州缩写，正常样例中包含该值。
+445,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.95,,医院名称全小写与正常样例风格一致，且与所在城市匹配，无异常。
+446,Stateavg,ak_scip-inf-4,FI,stage1,False,NONE,0.95,,"Value matches State abbreviation 'ak' and MeasureCode 'scip-inf-4', forming a valid state average code; flagged due to misleading AL-prefix normal samples, but cross-column consistency confirms correctness."
+446,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.95,,"Name reflects Alaska location, consistent with City/State; no typo, format violation, or dependency error."
+446,City,anchorage,DIST,stage2,False,NONE,0.95,,"Anchorage is a valid city in Alaska, matches State; no error, just not in AL-centric normal samples."
+446,State,ak,DIST,stage2,False,NONE,0.95,,"'ak' is a legitimate state code, appears in normal samples, and aligns with City and other row attributes."
+447,Stateavg,ak_scip-inf-6,FI,stage1,False,NONE,0.99,,Stateavg 前缀与当前行 State='ak' 一致，格式符合该列规范，前序误报
+447,MeasureName,surgeryxpatientsxneedingxhairxremovedxfromxthexsurgicalxareaxbeforexsurgery& xwhoxhadxhairxremovedxusingxaxsaferxmethodx(electricxclippersxorxhairxremovalxcreamxï¿½cxnotxaxrazor),VAD,stage1,True,T,1.0,surgery patients needing hair removed from the surgical area before surgery who had hair removed using a safer method (electric clippers or hair removal cream c not a razor),大量空格被替换为'x'或'& '，且包含乱码，疑似编码损坏，属于拼写错误
+447,State,ak,DIST,stage2,False,NONE,0.99,,ak 是合法的阿拉斯加州代码，与同行城市、邮编一致，正常样例中包含 ak，分布差异源于数据集中阿拉斯加行较少
+447,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.9,,名称与所在州、城市匹配，未发现拼写或格式异常，分布标记可能因样本量有限导致
+448,Stateavg,ak_scip-vte-1,FI,stage1,False,NONE,0.99,,"Stateavg is composed of State abbreviation and MeasureCode, so 'ak_scip-vte-1' is correct for State 'ak' and MeasureCode 'scip-vte-1'."
+448,HospitalName,xlxskx regionxl hospitxl,VAD,stage1,True,T,0.99,alaska regional hospital,"Name is a corrupted version of 'alaska regional hospital', consistent with ProviderNumber 20017 and location Anchorage, AK."
+448,State,ak,DIST,stage2,False,NONE,0.99,,"'ak' is a valid state code, matches City Anchorage, and no error."
+449,HospitalOwner,proxrietary,FI,stage1,True,T,0.95,proprietary,Typo: 'proxrietary' should be 'proprietary' as in normal samples.
+449,Stateavg,ak_scip-vte-2,FI,stage1,False,NONE,0.92,,"State is 'ak', Stateavg format is state abbreviation + '_' + measure code; 'ak_scip-vte-2' is correct; normal samples are from 'al' state, causing false alarm."
+449,HospitalName,alaska regional hospital,DIST,stage2,False,NONE,0.9,,"Name matches Alaska hospital; normal samples are from Alabama, so distribution difference is expected."
+449,City,anchorage,DIST,stage2,False,NONE,0.9,,"City 'anchorage' matches State 'ak'; normal samples are from Alabama, causing distribution anomaly not a real error."
+450,Score,empty,MV,stage1,True,MV,0.95,,Score值为'empty'，是明确的缺失哨兵，应视为缺失值
+450,Sample,empty,MV,stage1,True,MV,0.95,,Sample值为'empty'，是明确的缺失哨兵，应视为缺失值
+450,Stateavg,ak_ami-1,FI,stage1,False,NONE,0.9,,Stateavg 'ak_ami-1' 符合'州缩写_measurecode'的正常格式，且与State 'ak'和MeasureCode 'ami-1'一致
+450,City,bethel,DIST,stage2,False,NONE,0.9,,City 'bethel' 与State 'ak' 一致，是阿拉斯加州真实城市，无错误
+450,HospitalName,yukon kuskokwim delta reg hospital,DIST,stage2,False,NONE,0.9,,'yukon kuskokwim delta reg hospital' 为真实医院名称，与州和城市匹配，无错误
+450,State,ak,DIST,stage2,False,NONE,1.0,,State 'ak' 在正常样例中出现，为合法州代码，无错误
+451,Score,empty,MV,stage1,True,MV,0.99,,Score is placeholder 'empty' indicating missing value; normal samples are percentages.
+451,Sample,empty,MV,stage1,True,MV,0.99,,Sample is placeholder 'empty' indicating missing value.
+451,Stateavg,ak_ami-2,FI,stage1,False,NONE,0.98,,"Stateavg 'ak_ami-2' matches expected pattern, consistent with State='ak' and MeasureCode='ami-2'."
+451,City,bethel,DIST,stage2,False,NONE,0.98,,"City 'bethel' is valid in Alaska, consistent with State='ak' and ZipCode='99559'."
+451,HospitalName,yukon kuskokwim delta reg hospital,DIST,stage2,False,NONE,0.95,,"Hospital name matches known facility in Bethel, AK; not an error despite abbreviation."
+451,State,ak,DIST,stage2,False,NONE,0.99,,"State 'ak' is correct USPS code for Alaska, consistent with other address fields."
+453,HospitalType,acute care hospitaxs,FI,stage1,True,T,0.95,acute care hospitals,Current value contains a typo ('hospitaxs' instead of 'hospitals'); correct form is 'acute care hospitals' as seen in normal samples.
+453,CountyName,jefferson,DIST,stage2,True,VAD,0.95,colbert,"City Sheffield, AL is not in Jefferson County but in Colbert County, violating cross-column dependency."
+456,HospitalOwner,gxvernment - hxspital district xr authxrity,FI,stage1,True,T,0.95,government - hospital district or authority,拼写错误，多个字符被替换为'x'，与标准枚举值'government - hospital district or authority'高度相似
+456,CountyName,jxffxrson,T,stage1,True,VAD,0.9,colbert,城市Sheffield、州AL、邮编35660指向科尔伯特县(Colbert)，而非杰斐逊县，当前值疑似'jefferson'的拼写错误但跨列不一致
+457,CountyName,xefferson,T,stage1,True,VAD,0.95,colbert,"City sheffield is in Colbert County, not Jefferson; xefferson is a misspelling, likely intended as colbert based on hospital location"
+457,City,sheffield,DIST,stage2,False,NONE,0.9,,"Sheffield is a valid city in AL, matching other columns (address, zip); distribution anomaly is a false alarm"
+462,Score,empty,MV,stage1,True,MV,0.99,,'empty' 是明确的缺失值哨兵，应视为缺失值。
+462,Sample,x patients,FI,stage1,True,MV,0.9,,'x patients' 表示数据被压制或未知，不符合数字格式，应视为缺失值。
+464,MeasureCode,sxip-vte-1,VAD,stage1,True,VAD,0.95,scip-vte-1,Stateavg列值为'al_scip-vte-1'，由State缩写'al'和正确代码'scip-vte-1'构成，当前'sxip-vte-1'与此不一致，且与MeasureName的典型映射不符，应为typo导致跨列依赖违反。
+465,CountyName,jexxerson,T,stage1,True,VAD,0.9,colbert,根据城市Sheffield、州AL及邮编35660，医院位于Colbert County，当前值'jexxerson'虽似'jefferson'拼写错误，但与地址不一致，推断正确县名为Colbert。
+465,MeasureName,patients who got treatment  at the right time (within 24 hours before or after their surgery) to help prevent blood clots after certain types of surgery,DIST,stage2,True,FI,0.95,patients who got treatment at the right time (within 24 hours before or after their surgery) to help prevent blood clots after certain types of surgery,存在明显格式错误：'treatment  at'中包含多余空格，应为'treatment at'。
+466,MeasureName,heart attack patients given aspirin at arrival,DIST,stage2,False,NONE,0.95,,该指标描述与同行Condition/MeasureCode一致，属于正常指标名称，前序标记为误报
+467,Condition,hexrt attxck,FI,stage1,True,T,0.95,heart attack,与正确的医疗条件'heart attack'拼写高度相似，且同行MeasureName明确指示心脏发作治疗，应修正为'heart attack'
+468,Score,empty,MV,stage1,True,MV,0.95,,Score值为empty，是缺失哨兵，且Sample为0 patients，确为缺失。
+468,MeasureName,heart attack patients given ace inhibitor or arb for left ventricular systolic dysfunction (lvsd),DIST,stage2,False,NONE,0.9,,MeasureName与Condition(heart attack)及MeasureCode(ami-3)一致，无拼写错误，仅为分布不常见。
+468,Stateavg,al_ami-3,DIST,stage2,False,NONE,0.99,,Stateavg符合州缩写+度量代码格式，与State和MeasureCode匹配，且在正常样例中。
+471,PhoneNumber,334774x601,FI,stage1,True,FI,0.95,,包含非数字字符'x'，不符合10位纯数字北美电话号码格式
+471,City,ozark,DIST,stage2,False,NONE,0.95,,ozark是AL州Dale County的真实城市，与同行State、ZipCode、CountyName一致
+472,Score,empty,MV,stage1,False,NONE,0.95,,Sample 为 '0 patients'，Score 为 'empty' 属于合理缺失，非错误。
+472,Address,126xhospitalxave,T,stage1,True,T,0.98,126 hospital ave,与高频值 '126 hospital ave' 编辑距离为2，'x' 极可能为空格误输。
+473,MeasureName,heaxt failuxe patients given dischaxge instxuctions,VAD,stage1,True,T,0.98,heart failure patients given discharge instructions,"Multiple typos: 'heaxt'->'heart', 'failuxe'->'failure', 'dischaxge'->'discharge', 'instxuctions'->'instructions'; corresponds to MeasureCode 'hf-1'."
+474,City,ozarx,T,stage1,True,T,0.95,ozark,与正常样本'ozark'编辑距离1，且州AL和邮编36360指向Ozark市
+474,HospitalOwner,government - hospital district or authority,DIST,stage2,False,NONE,0.99,,该值已出现在正常样例中，为合法类别
+477,Stateavg,ax_pn-2,FI,stage1,True,VAD,0.95,al_pn-2,Prefix 'ax' conflicts with row's State (should match); State is likely 'al' based on other columns and normal samples.
+477,State,xl,VAD,stage1,True,VAD,0.95,al,City/County are in Alabama; ProviderNumber strongly associates with 'al'; 'xl' is a rare variant likely a typo.
+478,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,Value matches a normal sample; no typo or inconsistency found.
+481,MeasureName,pneumonia patients given the most appropriate initial antibiotic(s),DIST,stage2,False,NONE,1.0,,该值出现在正常样本中，且与上下文一致，是合法值
+482,Sample,62 patientx,FI,stage1,True,T,0.95,62 patients,末尾应为'patients'而非'patientx'，与正常样例不符，属于拼写错误
+483,State,xl,VAD,stage1,True,T,0.95,al,"State should be AL based on ZipCode 36360 and Stateavg prefix al, 'xl' is likely a typo for 'al'."
+484,Address,1x6 hospital ave,T,stage1,True,T,0.95,126 hospital ave,疑似OCR误读，'1x6'应为'126'，且高频值126 hospital ave出现23次，编辑距离1，结合正常地址格式不含'x'，判定为拼写错误
+485,City,xzark,T,stage1,True,T,0.95,ozark,"City 'xzark' is likely a typo for 'ozark', which matches the State 'AL' and ZipCode '36360' (Ozark, AL). Edit distance 1 to high-frequency 'ozark'."
+487,Score,empty,MV,stage1,False,NONE,0.95,,"Score 'empty' consistent with Sample '0 patients', expected missing indicator."
+487,MeasureName,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,DIST,stage2,False,NONE,0.9,,MeasureName matches MeasureCode 'scip-inf-4' and is a valid clinical measure description; unusual but not erroneous.
+488,Score,1xx%,FI,stage1,True,FI,0.95,,Score '1xx%' does not match percentage pattern; contains non-digit characters.
+488,MeasureCode,scip-inf-6,DIST,stage2,False,NONE,0.9,,MeasureCode 'scip-inf-6' is consistent with Condition and Stateavg; likely a valid but rare code.
+488,Stateavg,al_scip-inf-6,DIST,stage2,False,NONE,0.9,,Stateavg 'al_scip-inf-6' matches State 'al' and MeasureCode 'scip-inf-6'; consistent with pattern.
+489,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,该值与 MeasureCode 相符，且是正常样例中的标准值，跨列（Stateavg）一致，无错误迹象。
+490,ZipCode,x6x60,FI,stage1,True,FI,0.95,36360,"ZipCode应全为数字，'x6x60'疑似OCR错误，结合City=ozark, State=AL，正确应为36360。"
+490,HospitalType,acute caxe hospitals,FI,stage1,True,T,0.9,acute care hospitals,HospitalType仅有一个合法取值'acute care hospitals'，'caxe'为'care'的拼写变体，属于typo。
+491,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is 0 patients, so score is not applicable; 'empty' correctly indicates no data."
+491,Condition,heart attack,DIST,stage2,False,NONE,0.99,,Condition 'heart attack' is correctly spelled and consistent with MeasureCode AMI-1 and MeasureName.
+491,City,centre,DIST,stage2,False,NONE,0.99,,City 'Centre' is a real city in Alabama matching Cherokee County; no error.
+492,EmergencyService,yxs,VAD,stage1,True,VAD,0.5,yes,LLM 未返回该格判定，沿用前序结果（兜底）。
+492,Condition,heart attack,DIST,stage2,True,OTHER,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+493,HospitalType,acute care hxspitals,FI,stage1,True,T,0.95,acute care hospitals,值包含明显拼写错误（hxspitals → hospitals），与正常样本仅一个合法取值及其变体不符，属于typo
+493,HospitalOwner,voluntaryxnon-profitx-xprivate,FI,stage1,True,T,0.95,voluntary non-profit - private,值中用'x'替代了空格和连字符，属于系统拼写错误，应修正为标准枚举值
+493,Score,empty,MV,stage1,False,NONE,0.95,,同行Sample为'0 patients'，Score为'empty'是合理的缺失表示，非数据错误
+493,MeasureName,hxart attack patixnts givxn ace inhibitor or arb for lxft vxntricular systolic dysfunction (lvsd),VAD,stage1,True,VAD,0.98,heart attack patients given ace inhibitor or arb for left ventricular systolic dysfunction (lvsd),值大量字符被'x'替换，与MeasureCode='ami-3'对应的标准MeasureName不一致，违反跨列依赖，需修正为标准名称
+494,Score,empty,MV,stage1,True,MV,0.95,,Score 应为百分比数值，当前值为缺失哨兵 'empty'，且同行 Sample 为 '0 patients'，分数不可用，确为缺失值。
+494,Condition,heart attack,DIST,stage2,False,NONE,0.99,,'heart attack' 拼写正确，与同行 MeasureCode 'ami-4' 等一致，为有效值，前序标记为误报。
+494,ZipCode,35960,DIST,stage2,False,NONE,0.99,,邮编 35960 是阿拉巴马州 Centre 市的有效邮编，与同行 City 和 State 匹配，非错误。
+495,MeasureCode,ami-x,FI,stage1,True,FI,0.9,ami-2,MeasureCode应以数字结尾，而非字母x，正常样例中ami-2符合规范且与Condition对应
+495,Score,empty,MV,stage1,True,MV,0.95,,'empty'为缺失值哨兵，应表示为缺失而非字符串
+495,Condition,heart attack,DIST,stage2,False,NONE,0.95,,'heart attack'为正确值，与同行MeasureCode、MeasureName一致，分布模型误报
+496,Score,empty,MV,stage1,True,MV,0.99,,缺失值哨兵'empty'，应为百分比数字
+496,Sample,0 patxents,FI,stage1,True,T,0.95,0 patients,'patxents'拼写错误，应为'patients'
+496,Condition,heart attack,DIST,stage2,False,NONE,0.99,,'heart attack'为正确值，与MeasureName一致，误报
+497,HospitalType,acutx carx hospitals,FI,stage1,True,T,0.8,acute care hospitals,明显的拼写错误，正确值应为 'acute care hospitals'，尽管正常样例中出现了该错误变体。
+497,Score,empty,MV,stage1,True,MV,1.0,,值为 'empty' 明确指示缺失，且样本数为0，无法推算。
+497,Condition,heart attack,DIST,stage2,False,NONE,1.0,,'heart attack' 是合法值，与正常样例一致且与同行诊断、指标完全匹配，前序标记为误报。
+498,City,centre,DIST,stage2,False,NONE,0.95,,"Centre is a real city in AL (Cherokee County, ZIP 35960), consistent with row context; typical city spelling matches normal samples case."
+499,ZipCode,x5960,FI,stage1,True,FI,0.95,35960,"ZipCode should be 5-digit number; 'x5960' is likely a typo for '35960', the correct zip for Centre, AL (Cherokee County)."
+502,Sample,44 paxienxs,FI,stage1,True,T,0.95,44 patients,Typo: 'paxienxs' should be 'patients'
+502,CountyName,chxrokxx,VAD,stage1,True,T,0.95,cherokee,"Typo: 'chxrokxx' should be 'cherokee', consistent with HospitalName and ZipCode"
+502,Score,93%,DIST,stage2,False,NONE,0.8,,Score 93% is within normal range and format matches; distribution flag likely false positive
+504,State,ax,VAD,stage1,True,T,0.95,al,"State 'ax' is likely a typo for 'al', as indicated by Stateavg 'al_pn-4' and typical mapping from ProviderNumber 10022."
+506,Condition,pneumonix,FI,stage1,True,T,0.95,pneumonia,Typo: should be 'pneumonia' based on MeasureName about pneumonia.
+506,Score,93x,FI,stage1,True,FI,0.9,93%,Percentage should end with '%' not 'x'.
+507,MeasureName,pneumonix pxtients assessed xnd given influenzx vxccinxtion,VAD,stage1,True,T,0.99,pneumonia patients assessed and given influenza vaccination,"Contains multiple typos (pneumonix->pneumonia, pxtients->patients, xnd->and, influenzx->influenza, vxccinxtion->vaccination), failing to match the expected MeasureName for MeasureCode 'pn-7'."
+508,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，正常值为百分数，无跨列依赖表明其合理
+508,Sample,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，正常值为类似'X patients'的计数，无跨列依赖表明其合理
+509,Score,0%,DIST,stage2,False,NONE,0.9,,虽然0%在正常高值样本中显得异常，但样本量仅2例，可能真实反映零依从；格式合法，无跨列矛盾，前序DIST为误报。
+509,State,al,DIST,stage2,False,NONE,0.99,,'al'是标准阿拉巴马州两位缩写，与城市centre、郡cherokee一致；正常样本含'al'，前序标记为误报。
+511,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,Typo: 'acuxe care hospixals' should be 'acute care hospitals' with multiple character substitutions.
+511,MeasureCode,scip-inf-3,DIST,stage2,False,NONE,0.95,,"Stateavg 'al_scip-inf-3' is consistent with State 'al' and MeasureCode 'scip-inf-3'; code matches Condition and MeasureName, likely valid."
+512,Score,empty,MV,stage1,True,MV,0.95,,Score为'empty'表示缺失值哨兵，且Sample为'0 patients'确认该指标无数据。
+512,MeasureCode,scip-inf-4,DIST,stage2,False,NONE,0.9,,MeasureCode与Stateavg列值'al_scip-inf-4'完全一致（前缀State+下划线+MeasureCode），且与Condition外科感染预防主题语义相符，应为有效罕见code，前序分布异常标记为误报。
+513,CountyName,chxrokxx,VAD,stage1,True,T,0.95,cherokee,"Value 'chxrokxx' is a misspelling of 'cherokee', consistent with hospital name and location (Centre, AL is in Cherokee County)."
+514,Score,1xx%,FI,stage1,True,FI,0.95,,"Value '1xx%' contains non-numeric 'xx', not a valid percentage format outside 100% and 97% normal samples."
+516,PhoneNumber,3342xx2100,FI,stage1,True,FI,1.0,,"Phone number contains non-numeric characters 'xx', should be 10 digits."
+517,City,montxomery,T,stage1,True,T,0.99,montgomery,City 'montxomery' 与 CountyName 'montgomery' 及正常样例 'montgomery' 编辑距离为 1，明显为拼写错误。
+521,Score,empty,MV,stage1,True,MV,0.95,,"'empty' is a missing value sentinel, not a real score."
+521,EmergencyService,yxs,VAD,stage1,True,T,0.9,yes,"Likely a typo for 'yes', keyboard proximity (y and x are close) and context of acute care hospital."
+523,Sample,25x patients,FI,stage1,True,FI,0.95,25 patients,Value contains non-numeric 'x'; normal samples are numeric followed by ' patients'.
+523,City,montgomery,DIST,stage2,False,NONE,0.98,,"City is a valid city name present in normal samples, and matches State 'al' and CountyName 'montgomery'."
+526,HospitalOwner,volxntary non-profit - chxrch,FI,stage1,True,T,0.95,voluntary non-profit - church,"typo in 'volxntary' and 'chxrch', matches normal sample 'voluntary non-profit - church'"
+527,CountyName,monxgomery,T,stage1,True,T,0.99,montgomery,与同城市'Montgomery'及正常样例不一致，明显拼写错误，应为'montgomery'
+527,MeasureCode,pn-2,DIST,stage2,False,NONE,0.99,,正常样例中出现'pn-2'，且与同行Condition、MeasureName一致，无错误
+532,HospitalType,acute care hosxitals,FI,stage1,True,T,0.95,acute care hospitals,"""hosxitals"" 是 ""hospitals"" 的拼写错误，正常样例如 ""acute care hospitals""，当前值与之一致但字母错位。"
+532,Sample,87 patientx,FI,stage1,True,T,0.95,87 patients,"""patientx"" 应为 ""patients""，拼写错误，格式应为数字+空格+patients。"
+532,HospitalName,baptist medical cexter south,T,stage1,True,T,1.0,baptist medical center south,"""cexter"" 明显是 ""center"" 的拼写错误，高频正确值为 ""baptist medical center south""。"
+532,MeasureName,pxeumoxia patiexts assessed axd givex ixfluexza vaccixatiox,VAD,stage1,True,T,0.99,pneumonia patients assessed and given influenza vaccination,整个字符串是正确措辞的系统性拼写错误，MeasureCode 为 pn-7，正确 MeasureName 应为上述文本。
+536,EmergencyService,yex,VAD,stage1,True,T,0.9,yes,"yex is a typo of 'yes', consistent with majority for this provider and normal values"
+536,Stateavg,al_scip-inf-3,DIST,stage2,False,NONE,0.95,,"Stateavg is correctly formed as state abbreviation + measure code, consistent with State='al' and MeasureCode='scip-inf-3'; anomaly flag likely due to rare measure but value is valid"
+540,CountyName,montgomexy,T,stage1,True,T,0.95,montgomery,CountyName 'montgomexy' 与同行的 City 'montgomery' 及正常样例 'montgomery' 仅差一个字符，明显是拼写错误。
+544,ZipCode,3x10x,FI,stage1,True,FI,0.99,,"Value contains letters 'x', not a valid 5-digit ZIP code. Normal samples are all numeric."
+544,PhoneNumber,3342938000,DIST,stage2,False,NONE,0.95,,"10-digit number, area code 334 matches Montgomery, AL region. No format issue; likely false positive."
+545,MeasureName,heaxt attack patients given beta blockex at dischaxge,VAD,stage1,True,T,0.99,heart attack patients given beta blocker at discharge,"Multiple typos: 'heaxt'->'heart', 'blockex'->'blocker', 'dischaxge'->'discharge'"
+546,Score,empty,MV,stage1,True,MV,0.98,,Score 应为百分比，但值为缺失哨兵 'empty'，正常值为百分数字符串。
+546,Sample,x patients,FI,stage1,True,FI,0.97,,Sample 应为数字+空格+patients 格式，但包含非数字字符 'x'，不符合列规范。
+546,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.99,,当前值与正常样本列表中的合法类别完全一致，前序标记为误报。
+548,PhoneNumber,3342938xxx,FI,stage1,True,FI,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+551,CountyName,monxgomery,T,stage1,True,T,0.95,montgomery,与'City'和'State'列一致，且常见值为'montgomery'，编辑距离1，明显拼写错误。
+551,MeasureCode,hf-4,DIST,stage2,False,NONE,0.9,,正常样本包含'hf-4'，且与'MeasureName'和'Stateavg'列语义一致，无错误。
+553,HospitalType,acute care hospitals,DIST,stage2,False,NONE,1.0,,当前值'acute care hospitals'是正确且完整的医院类型描述，出现在正常样例列表中，与同行其他列无矛盾，标记为误报。
+554,Sample,74 patxents,FI,stage1,True,T,0.95,74 patients,Typo: 'patxents' should be 'patients'.
+554,ProviderNumber,10024,DIST,stage2,False,NONE,0.9,,"Valid provider ID format; within normal range, no context issue."
+554,MeasureName,pneumonia patients given smoking cessation advice/counseling,DIST,stage2,False,NONE,0.95,,Exact match in normal samples; consistent with MeasureCode and Condition.
+555,Condition,pxeumoxia,FI,stage1,True,T,0.95,pneumonia,明显是pneumonia的拼写错误，与行内MeasureName等上下文一致。
+555,Stateavg,al_pn-5x,VAD,stage1,True,VAD,0.98,al_pn-5c,违反跨列依赖：MeasureCode为pn-5c，State为al，Stateavg应为al_pn-5c，但实际为al_pn-5x。
+559,ProviderNumber,1xx24,FI,stage1,True,FI,1.0,,"Contains non-digit characters 'xx', expected 5-digit numeric per normal samples."
+559,State,xl,VAD,stage1,True,VAD,1.0,al,"State 'xl' is neither a valid USPS code nor consistent with City Montgomery, ZipCode 36106, and HospitalName; Stateavg prefix 'al_' strongly indicates correct state is AL."
+560,HospitalName,jaxkson hospital & xlinix inx,VAD,stage1,True,T,0.96,jackson hospital & clinic inc,"ProviderNumber 10024 对应的 HospitalName 在历史记录中绝大多数为 'jackson hospital & clinic inc'，当前值存在明显拼写差异（'jaxkson' vs 'jackson', 'xlinix inx' vs 'clinic inc'），且跨列依赖表明应为固定映射，判定为拼写错误。"
+560,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.95,,该值 'voluntary non-profit - private' 出现在正常样本中，且与同行其他列（如 HospitalType='acute care hospitals'）无冲突，无任何异常迹象，前序标记为误报。
+561,PhoneNumber,33x2938000,FI,stage1,True,FI,0.95,3342938000,含字母'x'，不符合10位数字的北美电话号码格式；基于同州样本推测区号可能为334，x疑为4的误触
+561,Sample,817 patients,DIST,stage2,False,NONE,0.8,,大样本量（817患者）在手术感染预防指标中可能合理，且与整行其他列无冲突，分布异常不足以判定为错误
+562,PhoneNumber,3342938xxx,FI,stage1,True,FI,0.95,,含非数字字符'xxx'，不符合10位数字格式
+562,MeasureName,allxheartxsurgeryxpatientsxwhosexbloodxsugarx(bloodxglucose)xisxkeptxunderxgoodxcontrolxinxthexdaysxrightxafterxsurgery,VAD,stage1,True,VAD,0.95,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,空格被替换为'x'，与MeasureCode scip-inf-4的标准名称不符
+563,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.95,,该值出现在正常样例中，属于合法取值，无跨列不一致，标记为误报。
+563,Sample,1062 patients,DIST,stage2,False,NONE,0.9,,格式正确（数字+patients），该医院指标患者数量大但合理，无跨列矛盾，仅因离群被标记。
+564,Stateavg,al_scipxvtex1,FI,stage1,True,FI,0.95,al_scip-vte-1,应遵循'al_'+MeasureCode格式，当前值缺少连字符且拼写有误，与同列正常样例不匹配
+564,EmergencyService,xes,VAD,stage1,True,T,0.95,yes,根据ProviderNumber历史，该院多数为'yes'，'xes'为'yes'的常见拼写错误
+567,Stateavg,xl_xmi-2,FI,stage1,True,T,0.95,al_ami-2,值与State='al'和MeasureCode='ami-2'不匹配，'xl'应为'al'，'xmi'应为'ami'，属于拼写错误。
+572,PhoneNumber,334x561400,FI,stage1,True,FI,0.95,,包含非数字字符'x'，不符合10位纯数字北美电话号码格式
+572,HospitalOwner,voluntary non-profit - otxer,FI,stage1,True,T,0.98,voluntary non-profit - other,'otxer' 是 'other' 的明显拼写错误
+572,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵 'empty'，表示无数据
+572,State,ax,VAD,stage1,True,VAD,0.95,al,与同行 Stateavg 前缀 'al' 及 ProviderNumber 历史分布矛盾，且 City/Zip 对应 Alabama
+577,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,取值 'yes' 是该列最常见合法值，且与医院类型 'acute care hospitals' 一致，无跨列矛盾。前序标记为分布异常但正常样例中已包含 'yes'，判定为误报。
+578,City,vallex,T,stage1,True,T,0.95,valley,City name should be 'valley' matching zip 36854 and county chambers
+578,CountyName,xhambers,T,stage1,True,T,0.95,chambers,County should be 'chambers' consistent with city Valley and zip 36854
+579,EmergencyService,xes,VAD,stage1,False,NONE,0.9,,正常样例中包含'xes'，表明该值可能是有效编码，不违反跨列依赖。
+580,Sample,50 pxtients,FI,stage1,True,T,0.99,50 patients,pxtients 应为 patients
+580,MeasureCode,px-5c,T,stage1,True,T,1.0,pn-5c,px 应为 pn；与 Stateavg 的 pn-5c 一致
+580,MeasureName,pneumonia patients given initial antibiotic(s) within 6 hours after arrival,DIST,stage2,False,NONE,0.95,,该名称与 Condition 和 MeasureCode (pn-5c) 一致，是有效措施描述
+587,Score,empty,MV,stage1,True,MV,0.9,,Score应为百分比或空；样本为0患者时分数缺失，但'empty'字符串不当，应为真正的缺失值
+587,EmergencyService,xes,VAD,stage1,True,T,0.85,yes,'xes'很可能是'yes'的拼写错误，且同医院多数记录为'yes'，正常样本中'xes'为异常变体
+588,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,拼写错误：acuxe应为acute，hospixals应为hospitals
+588,Sample,172 patxents,FI,stage1,True,T,0.95,172 patients,拼写错误：patxents应为patients
+590,City,vxlley,T,stage1,True,T,0.95,valley,"Typo: 'vxlley' has edit distance 1 to 'valley', a valid Alabama city matching zip 36854 and county Chambers."
+590,CountyName,chaxbers,T,stage1,True,T,0.95,chambers,"Typo: 'chaxbers' has edit distance 1 to 'chambers', the correct county for Valley, AL."
+591,Score,empty,MV,stage1,True,MV,1.0,,"Score is missing sentinel 'empty', should be a percentage score like the normal samples (e.g., '95%')"
+591,Sample,empty,MV,stage1,True,MV,1.0,,"Sample is missing sentinel 'empty', should be a patient count like 'X patients'"
+591,Condition,heart attack,DIST,stage2,False,NONE,1.0,,'heart attack' is correctly spelled and matches MeasureName and MeasureCode; prior flag is a false positive
+592,Score,empty,MV,stage1,True,MV,0.95,,Value 'empty' is a missing indicator; score not reported
+592,Sample,empty,MV,stage1,True,MV,0.95,,Value 'empty' is a missing indicator; sample size not reported
+592,State,ax,VAD,stage1,True,T,0.99,al,Should be 'al' (Alabama) based on ProviderNumber and ZipCode
+592,Condition,heart attack,DIST,stage2,False,NONE,0.99,,Correct value consistent with measure
+593,PhoneNumber,33x8972257,FI,stage1,True,FI,0.95,3348972257,北美电话号码应为10位纯数字，当前包含字母'x'，极可能是'4'的误录，且修复后区号334在正常样例中存在
+593,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵'empty'，并非百分比得分
+593,Sample,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵'empty'，并非患者数量
+594,Score,empty,MV,stage1,True,MV,0.95,,值为缺省哨兵 'empty'，该列正常值为百分比字符串
+594,Sample,empty,MV,stage1,True,MV,0.95,,值为缺省哨兵 'empty'，该列正常值为患者计数
+594,Condition,heart attack,DIST,stage2,False,NONE,0.9,,值正确，出现在正常样例中，且与同行 MeasureName 一致，前序标记为误报
+595,Score,empty,MV,stage1,True,MV,1.0,,"Score field contains missing sentinel 'empty', should be a percentage score."
+595,Sample,empty,MV,stage1,True,MV,1.0,,"Sample field contains missing sentinel 'empty', should be a patient count."
+595,Condition,heart attack,DIST,stage2,False,NONE,0.95,,Condition 'heart attack' is a valid value and consistent with MeasureName; flagged as DIST but present in normal samples.
+596,Score,empty,MV,stage1,True,MV,0.95,,Value 'empty' is a missing value indicator; should be a percentage like normal samples.
+596,Sample,empty,MV,stage1,True,MV,0.95,,Value 'empty' is a missing value indicator; should be a patient count like normal samples.
+596,CountyName,coffee,DIST,stage2,False,NONE,0.9,,"'coffee' is a valid county in Alabama, present in normal samples, and consistent with State 'al'."
+596,Condition,heart attack,DIST,stage2,False,NONE,0.9,,"'heart attack' is correctly spelled, present in normal samples, and matches MeasureCode and MeasureName."
+597,Score,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵 'empty'，应视为缺失值
+597,Sample,empty,MV,stage1,True,MV,0.99,,值为缺失哨兵 'empty'，应视为缺失值
+597,CountyName,coffee,DIST,stage2,False,NONE,0.95,,Coffee County 是 Elba 市所在县，正常样例中也包含 'coffee'，无错误
+597,Condition,heart attack,DIST,stage2,False,NONE,0.95,,'heart attack' 拼写正确，且与同行 MeasureName 一致，无错误
+598,MeasureCode,hf-1,DIST,stage2,False,NONE,0.95,,"MeasureCode hf-1 aligns with heart failure condition and measure name; Stateavg includes same code, consistent pattern."
+599,Condition,heart faixure,FI,stage1,True,T,0.98,heart failure,"Typo in 'faixure', likely intended 'failure' based on normal samples and context."
+600,Score,empty,MV,stage1,True,MV,0.95,,Score值为'empty'，是缺失哨兵，不符合该列百分比数字的格式，且同行Sample为'0 patients'，可能分母为零导致数据缺失，应视为缺失值。建议修复为空值。
+600,CountyName,coffee,DIST,stage2,False,NONE,0.98,,CountyName为'coffee'，同行City为'elba'，State为'al'，阿拉巴马州Coffee县确实包含Elba市，且正常样例中包含'coffee'，因此该值为正确值，前序标记为误报。
+601,Score,empty,MV,stage1,True,MV,0.9,,Score列为缺失哨兵'empty'，样本量为0患者，可能无有效得分，但仍为缺失值需处理
+601,City,exba,T,stage1,True,T,1.0,elba,与医院名'elba general hospital'及邮编36323对应的Elba不一致，编辑距离1，明显拼写错误
+601,CountyName,coffee,DIST,stage2,False,NONE,1.0,,"Coffee是Alabama合法县名，与Elba, AL 36323匹配，且出现在正常样例中，为误报"
+602,CountyName,coffxx,T,stage1,True,T,0.95,coffee,"与正常样例'coffee'编辑距离仅2，且所在城市Elba属于Coffee County, AL"
+602,EmergencyService,yes,DIST,stage2,False,NONE,0.99,,'yes'是正常样例常见值，符合急诊服务属性，前序标记为误报
+606,Stateavg,al_pn-6,DIST,stage2,False,NONE,0.95,,"Value 'al_pn-6' matches combination of State='al' and MeasureCode='pn-6', consistent with other normal samples like 'al_hf-3' etc. No error."
+608,ProviderNumber,x0027,FI,stage1,True,FI,0.9,,ProviderNumber 应为5位数字，'x0027'包含字母不符合格式
+608,Condition,surgical ixfectiox prevextiox,FI,stage1,True,T,0.95,surgical infection prevention,'surgical ixfectiox prevextiox' 明显拼写错误，应为 'surgical infection prevention'
+608,Score,empty,MV,stage1,True,MV,0.99,,'empty' 是缺失哨兵，表示数据缺失
+608,Sample,empty,MV,stage1,True,MV,0.99,,'empty' 是缺失哨兵，表示数据缺失
+608,CountyName,coffee,DIST,stage2,False,NONE,0.9,,Coffee County 是有效县名，在正常样本中，且与州信息一致
+609,Score,empty,MV,stage1,True,MV,0.98,,缺失值哨兵'empty'，应记录实际百分比
+609,Sample,empty,MV,stage1,True,MV,0.98,,缺失值哨兵'empty'，应记录实际患者数
+609,ZipCode,36323,DIST,stage2,False,NONE,0.95,,"与City及State一致，Elba, AL邮编确为36323"
+609,City,elba,DIST,stage2,False,NONE,0.95,,与ZipCode及State一致，确为Elba城市
+610,Score,empty,MV,stage1,True,MV,0.99,,"Value is 'empty', a clear missing value indicator; no score provided."
+610,Sample,empty,MV,stage1,True,MV,0.99,,"Value is 'empty', a clear missing value indicator."
+610,ZipCode,36323,DIST,stage2,False,NONE,0.9,,"36323 is the correct ZIP code for Elba, Alabama; consistent with City and State."
+610,City,elba,DIST,stage2,False,NONE,0.9,,"Elba is a valid city in Coffee County, AL; consistent with ZIP code 36323."
+611,Score,empty,MV,stage1,True,MV,0.98,,Score应为百分比数值，'empty'是缺失哨兵，符合MV定义。
+611,Sample,empty,MV,stage1,True,MV,0.98,,Sample应为患者计数，'empty'是缺失哨兵，符合MV定义。
+611,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,'surgical infection prevention' 是该列正常值之一，与正常样本完全一致，非错误。
+611,ZipCode,36323,DIST,stage2,False,NONE,0.95,,36323是阿拉巴马州Elba的有效邮政编码，与City/State一致，分布差异因样本局限导致。
+612,Score,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵 'empty'，正常值应为百分比数字
+612,Sample,empty,MV,stage1,True,MV,1.0,,值为缺失哨兵 'empty'，正常值应为患者计数格式
+612,MeasureName,all heaxt suxgexy patients whose blood sugax (blood glucose) is kept undex good contxol in the days xight aftex suxgexy,VAD,stage1,True,VAD,1.0,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,与 MeasureCode 'scip-inf-4' 对应的标准名称严重不符，存在多处拼写错误，违反跨列依赖
+612,CountyName,coffee,DIST,stage2,False,NONE,1.0,,Coffee 是阿拉巴马州真实县名，且与城市 Elba 及邮编 36323 一致，不是错误
+612,ZipCode,36323,DIST,stage2,False,NONE,1.0,,36323 是 Alabama 州 Elba 市的有效邮编，与同行城市、州、县匹配
+613,Score,empty,MV,stage1,True,MV,1.0,,"Value 'empty' is a missing value indicator, not a valid percentage score."
+613,Sample,empty,MV,stage1,True,MV,1.0,,"Value 'empty' is a missing value indicator, not a valid patient count."
+613,Condition,surgical infection prevention,DIST,stage2,False,NONE,1.0,,Value appears in normal samples and is consistent with MeasureCode and MeasureName.
+613,Address,987 drayton street,DIST,stage2,False,NONE,0.95,,"Address format is valid, no typo or cross-column inconsistency detected."
+614,Score,empty,MV,stage1,True,MV,0.95,,"Value 'empty' is a missing value sentinel, not a percentage."
+614,Sample,empty,MV,stage1,True,MV,0.95,,"Value 'empty' is a missing value sentinel, not a patient count."
+614,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,Value matches normal samples and is consistent with MeasureCode and MeasureName.
+614,CountyName,coffee,DIST,stage2,False,NONE,0.95,,"Value is in normal samples and county Coffee is consistent with City Elba, AL."
+615,Score,empty,MV,stage1,True,MV,0.99,,缺失值哨兵'empty'，应填充实际百分比或留空
+615,Sample,empty,MV,stage1,True,MV,0.99,,缺失值哨兵'empty'，应填充实际样本数
+615,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,在正常样例中完整匹配，未见错误
+615,ProviderNumber,10027,DIST,stage2,False,NONE,0.95,,符合正常样例格式，未见异常
+619,Address,2000 pepperell parkway,DIST,stage2,False,NONE,0.95,,"Address format is normal, consistent with typical street addresses, no cross-column inconsistency."
+619,ProviderNumber,10029,DIST,stage2,False,NONE,0.95,,"Valid 5-digit provider number within normal range, no format error."
+621,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，无相关患者，Score应为空，'empty'合理表示数据缺失，非错误
+621,Sample,0 patients,DIST,stage2,False,NONE,0.95,,'0 patients'在正常样例中，且与Score的empty一致，无错误
+622,Stateavg,al_amix8a,FI,stage1,True,T,0.98,al_ami-8a,"The value 'al_amix8a' does not match the expected format 'al_<MeasureCode>', where MeasureCode is 'ami-8a'. The 'amix8a' appears to be a typo for 'ami-8a', with missing hyphen and extra character 'x'. The row's State is 'al' and MeasureCode is 'ami-8a', consistent with normal samples like 'al_ami-2'."
+623,State,al,DIST,stage2,False,NONE,0.98,,"State 'al' is a valid state code, consistent with City 'opelika', ZipCode '36801', and County 'lee' in Alabama; flag appears to be a false positive due to presence of invalid normal samples like 'xl','ax'."
+625,State,al,DIST,stage2,False,NONE,0.95,,"State 'al' matches City 'opelika', ZipCode '36801', CountyName 'lee' indicating Opelika, AL; consistent with row context"
+626,ZipCode,36801,DIST,stage2,False,NONE,0.95,,36801在正常样本中出现，且与City 'opelika'和State 'al'匹配，是有效ZIP。
+626,HospitalName,east alabama medical center and snf,DIST,stage2,False,NONE,0.95,,'east alabama medical center and snf'在正常样本中完全匹配，不是错误。
+627,ProviderNumber,x0029,FI,stage1,True,FI,0.95,,"ProviderNumber should be a 5-digit number per normal samples, but 'x0029' contains a letter 'x'."
+628,EmergencyService,yex,VAD,stage1,False,NONE,0.95,,正常样例中包含'yex'，且该行无跨列依赖冲突，可能为合法值，前序标记为误报。
+631,Condition,pneumonxa,FI,stage1,True,T,0.95,pneumonia,当前值 'pneumonxa' 与正确条件 'pneumonia' 仅一个字符差异（x vs i），且同行 MeasureCode 'pn-6' 及 MeasureName 均明确指向肺炎，应为拼写错误。
+631,Sample,115 patients,DIST,stage2,False,NONE,0.9,,'115 patients' 格式正确，跨列一致（与 Score '97%' 等无矛盾），前序标记仅因数值不在常见小样本中，但该指标样本量可达数百，判断为误报。
+633,CountyName,xee,T,stage1,True,T,0.95,lee,"Opelika is located in Lee County, AL; 'xee' is likely a typo for 'lee' (edit distance 1)."
+634,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,"The value 'acuxe care hospixals' is a typo of 'acute care hospitals', as evidenced by the consistent correct form in normal samples."
+634,City,opelika,DIST,stage2,False,NONE,0.98,,'opelika' is a valid city in the normal samples and matches the state AL and zip 36801; therefore it is a false alarm.
+635,Sample,1016 patients,DIST,stage2,False,NONE,0.95,,Sample value '1016 patients' is consistent with the format and the high score of 99% is plausible with a large sample; the reported value matches expected pattern.
+635,Stateavg,al_scip-inf-2,DIST,stage2,False,NONE,1.0,,"Stateavg 'al_scip-inf-2' is derived from State 'al' and MeasureCode 'scip-inf-2', consistent with the row and normal sample patterns."
+637,Sample,241 patients,DIST,stage2,False,NONE,0.95,,样本量241与手术感染预防措施及医院规模一致，无格式或跨列矛盾，仅分布异常
+638,Sample,1421 patients,DIST,stage2,False,NONE,0.9,,"Sample value '1421 patients' is an outlier compared to normal samples, but possible for a large hospital; no cross-column inconsistency detected, likely not an error."
+639,ProviderNumber,1xx29,FI,stage1,True,FI,0.95,,"Contains non-digit letters 'xx', expected 5-digit numeric ID"
+639,MeasureCode,scip-vtx-1,VAD,stage1,True,VAD,0.99,scip-vte-1,Mismatches MeasureName and Stateavg pattern; 'vtx' is typo for 'vte'
+639,CountyName,lee,DIST,stage2,False,NONE,0.97,,"Opelika, AL is in Lee County; correct value"
+642,Score,67%,DIST,stage2,False,NONE,0.9,,"Small sample (3 patients) could yield 67% (2/3), which is plausible despite low compared to high-percentage normal samples. No cross-column inconsistency detected."
+643,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients时，Score为'empty'表示无数据，非缺失错误
+644,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，Score无数据，empty为有效哨兵，非错误
+644,Condition,heart attack,DIST,stage2,False,NONE,0.99,,heart attack为正确拼写，正常样例中同样存在，前序标记为误报
+645,ProviderNumber,1xx32,FI,stage1,True,FI,0.95,,"ProviderNumber should be all digits, normal samples are 5-digit numbers, but current value contains 'xx'."
+646,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，Score缺失合理，非错误
+646,Stateavg,alxami-7a,FI,stage1,True,T,0.98,al_ami-7a,应为al_前缀加MeasureCode，'x'疑为'_'的typo
+646,Condition,heart attack,DIST,stage2,False,NONE,0.95,,heart attack是常见合法值，与同行一致，前序误报
+647,Score,empty,MV,stage1,True,MV,0.95,,Score值为缺失哨兵'empty'，且Sample为0，可能表示无数据，但正常形态应为百分比或空，判为缺失值。
+647,MeasureCode,ami-8a,DIST,stage2,False,NONE,0.9,,MeasureCode 'ami-8a' 与 Condition 'heart attack' 及 Stateavg 'al_ami-8a' 一致，符合AMI心脏病指标命名，虽不在抽样正常样本中，但属合理代码，非错误。
+648,MeasureCode,hfx1,FI,stage1,True,T,0.95,hf-1,"Stateavg is 'al_hf-1' and Condition is heart failure, suggesting correct code is 'hf-1'; 'hfx1' likely typo (x instead of dash)."
+650,MeasureName,heart failure patients given ace inhibitor or arb for left xentricular systolic dysfunction (lxsd),T,stage1,True,T,0.95,heart failure patients given ace inhibitor or arb for left ventricular systolic dysfunction (lvsd),"'xentricular' should be 'ventricular' and '(lxsd)' should be '(lvsd)', matching common correct value."
+651,MeasureName,heart faxlure patxents gxven smokxng cessatxon advxce/counselxng,VAD,stage1,True,T,0.98,heart failure patients given smoking cessation advice/counseling,明显的多个拼写错误：'faxlure'应为'failure'，'patxents'应为'patients'等。尽管被标记为跨列依赖违规，根本原因是typo。
+651,Score,100%,DIST,stage2,False,NONE,0.95,,Score为'100%'是正常百分比值，且同行Sample为'2 patients'，小样本下完全可行，前序分布检测可能因样本量小而产生误报。
+652,Address,209 xorth maix street,T,stage1,True,T,0.95,209 north main street,与高频正确值编辑距离2，且城市名'wedowee'一致，明显拼写错误
+653,EmergencyService,xo,VAD,stage1,False,NONE,0.95,,值'xo'在正常样例中，无跨列不一致，前序误报
+653,HospitalOwner,government - local,DIST,stage2,False,NONE,0.95,,值'government - local'在正常样例中，无跨列不一致，前序误报
+654,HospitalName,wedowee hosxital,T,stage1,True,T,0.99,wedowee hospital,与高频值'wedowee hospital'编辑距离1，且与City、Zip上下文一致，为拼写错误
+654,City,wxdowxx,VAD,stage1,True,T,0.99,wedowee,相较于ProviderNumber同一致城市'wedowee'，后3字符错为'xx'，为拼写错误，非跨列依赖破坏
+655,ProviderNumber,1xx32,FI,stage1,True,FI,0.95,,ProviderNumber 应仅包含5位数字，当前值包含字母'xx'，不符合格式规范。
+655,HospitalName,wedowee hospital,DIST,stage2,False,NONE,0.9,,整行文本列（City、Address等）均为小写，HospitalName 小写与此风格一致，属于系统性的数据录入格式，非个别错误。
+656,Score,96%,DIST,stage2,False,NONE,0.95,,Score值96%在正常样例中出现，且与同行上下文（肺炎指标PN-6，样本数23）无冲突，应属正常。
+658,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，正常值为百分比
+658,Sample,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，正常值为患者计数
+659,Score,empty,MV,stage1,True,MV,0.95,,"Value 'empty' is a missing value indicator; normal samples are percentages like '97%', indicating this should be a percentage score."
+659,Sample,empty,MV,stage1,True,MV,0.95,,"Value 'empty' is a missing value indicator; normal samples are patient counts like '2 patients', indicating this should be a number of patients."
+660,Score,empty,MV,stage1,True,MV,1.0,,缺失哨兵'empty'
+660,Sample,empty,MV,stage1,True,MV,1.0,,缺失哨兵'empty'
+660,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,值正确，在正常样例中且拼写正确
+661,Score,empty,MV,stage1,True,MV,0.99,,值'empty'为明确缺失哨兵，该列应为百分比分数，无法推断真实值
+661,Sample,empty,MV,stage1,True,MV,0.99,,值'empty'为明确缺失哨兵，该列应为患者计数，无法推断真实值
+662,Score,empty,MV,stage1,True,MV,1.0,,值为'empty'，是缺失哨兵，与正常百分比格式不符
+662,Sample,empty,MV,stage1,True,MV,1.0,,值为'empty'，是缺失哨兵，与正常患者计数格式不符
+663,Score,empty,MV,stage1,True,MV,0.95,,值为明显的缺失哨兵 'empty'，与正常样例的百分比格式不符，且整行上下文无矛盾，确认为缺失值。
+663,Sample,empty,MV,stage1,True,MV,0.95,,值为明显的缺失哨兵 'empty'，与正常样例的患者计数格式不符，且整行上下文无矛盾，确认为缺失值。
+664,Score,empty,MV,stage1,True,MV,1.0,,值为'empty'，表示数据缺失
+664,Sample,empty,MV,stage1,True,MV,1.0,,值为'empty'，表示数据缺失
+664,Address,209 north main street,DIST,stage2,False,NONE,0.9,,地址与城市Wedowee一致，格式正常，无错误迹象；前序标记为误报
+664,PhoneNumber,2563572111,DIST,stage2,False,NONE,0.9,,区号256与阿拉巴马州Wedowee匹配，号码格式正常；前序标记为误报
+665,Score,empty,MV,stage1,True,MV,0.98,,值'empty'为缺失哨兵，正常样例为百分比格式
+665,Sample,empty,MV,stage1,True,MV,0.98,,值'empty'为缺失哨兵，正常样例为'数字 patients'格式
+666,PhoneNumber,20593xx011,FI,stage1,True,FI,1.0,,包含非数字字符'x'，不符合10位数字格式
+666,ZipCode,35233,DIST,stage2,False,NONE,1.0,,正常样本中已包含'35233'，且与城市伯明翰、州AL匹配，属于误报
+668,Sample,87 paxienxs,FI,stage1,True,T,0.95,87 patients,"'paxienxs' is a typo for 'patients', as seen in normal samples like '14 patients'."
+668,HospitalName,university of alabama hospital,DIST,stage2,False,NONE,0.98,,The hospital name is a legitimate proper name and consistent with Alabama hospital names in the normal samples.
+668,ZipCode,35233,DIST,stage2,False,NONE,1.0,,"The zip code '35233' appears exactly in the normal samples and is valid for Birmingham, AL."
+671,Score,empty,MV,stage1,True,MV,0.95,,Score 值为缺失哨兵 'empty'，且 Sample 列为 '0 patients'，无有效分母，表明该值应为空或不可用，但当前哨兵可视为缺失值。
+671,Condition,heart attack,DIST,stage2,False,NONE,0.99,,'heart attack' 出现在正常样例列表中，且与同行 MeasureName 中的病症描述一致，不属于错误。
+672,CountyName,jxffxrson,T,stage1,True,T,0.95,jefferson,与正常高频值 'jefferson' 编辑距离仅2，且所在城市 birmingham 位于 alabama 州的 jefferson 县，跨列一致，确认为拼写错误。
+672,MeasureName,heartxattackxpatientsxgivenxpcixwithinx90xminutesxofxarrival,VAD,stage1,True,T,0.99,heart attack patients given pci within 90 minutes of arrival,当前值将所有空格替换为 'x'，与 MeasureCode 'ami-8a' 对应的标准名称仅字符差异，属于拼写错误而非违反跨列依赖。
+673,Sample,618 xatients,FI,stage1,True,T,0.95,618 patients,'xatients' is a typo for 'patients'
+673,Condition,heart failure,DIST,stage2,False,NONE,0.99,,"'heart failure' is a valid condition, consistent with MeasureName and Stateavg"
+674,EmergencyService,yex,VAD,stage1,True,T,0.9,yes,拼写错误，基于同ProviderNumber多数为yes且值接近yes
+674,Condition,heart failure,DIST,stage2,False,NONE,1.0,,heart failure与正常样例及同行MeasureName一致，无错误
+675,HospitalOwner,government - state,DIST,stage2,False,NONE,0.95,,该值存在于正常样本列表中，与同行其他列一致，是合法值。
+675,HospitalName,university of alabama hospital,DIST,stage2,False,NONE,0.95,,该名称拼写正确，与同行State、City一致，是真实医院，误报。
+676,MeasureCode,hfx4,FI,stage1,True,FI,0.9,hf-4,"Value 'hfx4' does not match expected pattern of dash-separated segments, appears to be a typo/format error for 'hf-4' given measure name and normal samples."
+676,HospitalName,university of alabama hospital,DIST,stage2,False,NONE,0.95,,"Hospital name is correct for Birmingham, AL; all lowercase matches dataset convention; normal samples contain similar lowercase names."
+676,ZipCode,35233,DIST,stage2,False,NONE,0.95,,"Zip code 35233 appears in normal samples and is valid for Birmingham, AL."
+678,Stateavg,alxpn-3b,FI,stage1,True,T,0.9,al_pn-3b,疑似将'al_pn-3b'中的下划线误打为'x'，与State和MeasureCode一致
+678,MeasureCode,pn-3b,DIST,stage2,False,NONE,0.95,,正常样例中包含此值，无错误
+679,ZipCode,3x233,FI,stage1,True,T,0.95,35233,"Contains non-digit 'x'; matches normal sample 35233 for Birmingham, AL."
+679,Condition,xneumonia,FI,stage1,True,T,0.95,pneumonia,Typo: 'x' instead of 'p'; consistent with MeasureName and normal sample.
+685,ZipCode,x52xx,FI,stage1,True,FI,0.99,,"Contains non-digit characters 'x', not a valid 5-digit ZIP code."
+689,CountyName,jexxerson,T,stage1,True,T,0.99,jefferson,"Typo: 'jexxerson' is 2 edits from normal sample 'jefferson', and row context (City: birmingham, State: al) matches Jefferson County, AL."
+690,City,birminxham,T,stage1,True,T,0.95,birmingham,疑似拼写错误，与高频值 'birmingham' 编辑距离1，且与整行上下文（State为AL）一致。
+691,MeasureCode,amix1,FI,stage1,True,T,0.95,ami-1,"Current value 'amix1' does not match the typical pattern of lowercase letters, dash, then digits/letters. Normal samples include 'ami-2', and the Stateavg 'al_ami-1' strongly suggests the correct code should be 'ami-1'. Likely a typo where 'x' replaced the dash."
+691,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.99,,The value 'voluntary non-profit - private' appears in the normal samples and is a valid hospital owner type. No cross-column inconsistencies found. The prior flagging is likely a false positive.
+692,CountyName,elmoxe,T,stage1,True,T,0.95,elmore,与同州高频值'elmore'编辑距离1且城市Tallassee实际位于Elmore County，应拼写错误
+692,MeasureCode,ami-2,DIST,stage2,False,NONE,0.9,,ami-2出现在正常样本中，且与Condition和MeasureName一致，标记应为误报
+694,Score,empty,MV,stage1,False,NONE,0.9,,Score为'empty'与Sample'0 patients'一致，无患者时评分缺失是合理的，不属于错误。
+694,MeasureCode,amx-4,VAD,stage1,True,T,0.95,ami-4,根据MeasureName应为'ami-4'，'amx-4'为拼写错误，与Stateavg列中的'ami-4'不一致。
+694,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.95,,'voluntary non-profit - private'是正常样例中存在的值，并非异常。
+695,HospitalType,acute cxre hospitxls,FI,stage1,True,T,0.95,acute care hospitals,显然为'acute care hospitals'的拼写错误，'cxre'应为'care'，'hospitxls'应为'hospitals'
+695,Condition,heart attaxk,FI,stage1,True,T,0.95,heart attack,'heart attaxk'应是'heart attack'的拼写错误，且MeasureName为'heart attack patients...'印证了该条件
+696,Score,empty,MV,stage1,False,NONE,0.7,,样本数为0时，分数占位符'empty'合理，上下文一致，不是缺失值错误。
+696,City,tallaxxee,T,stage1,True,T,0.99,tallassee,与同州邮编36078对应城市'tallassee'编辑距离为2，明显示拼写错误。
+696,Condition,heart attack,DIST,stage2,False,NONE,0.9,,与同行MeasureName一致，且'heart attack'为有效条件值，分布异常标记为误报。
+697,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'，是缺失哨兵，同列正常值为百分比格式，且Sample为0可能导致缺失，但仍应标记为缺失值错误
+697,HospitalName,communitx hospital inc,T,stage1,True,T,0.97,community hospital inc,'communitx' 与高频值 'community' 编辑距离为1，极可能为拼写错误
+698,Condition,hexrt fxilure,FI,stage1,True,FI,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+698,Score,xx%,FI,stage1,True,FI,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+698,CountyName,elxore,T,stage1,True,T,0.5,elmore,LLM 未返回该格判定，沿用前序结果（兜底）。
+699,PhoneNumber,334x836541,FI,stage1,True,FI,0.95,,"Contains non-digit 'x', should be 10-digit numeric phone number"
+701,State,xl,VAD,stage1,True,T,0.99,al,与同行的City、ZipCode、CountyName均指向Alabama，应为'al'；当前'xl'为拼写错误，仅一个字符差异。
+702,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,值完全拼写正确，是正常样例之一，前序标记为误报。
+703,HospitalType,acute care hospitals,DIST,stage2,False,NONE,1.0,,当前值完全匹配正常样例列表中的首个条目，为合法值，前序误报。
+704,ProviderNumber,100x4,FI,stage1,True,FI,0.95,,ProviderNumber应为5位纯数字，正常样例均为数字，当前值'100x4'包含字母x，明显格式错误
+705,HospitalType,acutexcarexhospitals,FI,stage1,True,T,0.95,acute care hospitals,明显的拼写错误，正确值应为 acute care hospitals
+705,MeasureName,pxeumoxia patiexts givex ixitial axtibiotic(s) withix 6 hours after arrival,VAD,stage1,True,T,0.99,pneumonia patients given initial antibiotic(s) within 6 hours after arrival,明显拼写错误，与 MeasureCode 匹配的正确字符串应为 pneumonia patients given initial antibiotic(s) within 6 hours after arrival
+706,MeasureName,pxeumoxia patiexts givex the most appropriate ixitial axtibiotic(s),VAD,stage1,True,T,0.99,pneumonia patients given the most appropriate initial antibiotic(s),"Multiple typos: pxeumoxia->pneumonia, patiexts->patients, givex->given, ixitial->initial, axtibiotic->antibiotic; matches MeasureCode pn-6's correct name."
+706,Stateavg,al_pn-6,DIST,stage2,False,NONE,0.99,,"al_pn-6 follows pattern State_MeasureCode; State is al and MeasureCode is pn-6, so no error."
+707,HospitalType,acute care hospitals,DIST,stage2,False,NONE,1.0,,当前值与正常样例中的正确值 'acute care hospitals' 完全匹配，无拼写或格式错误，前序标记为误报。
+709,Sample,10 patients,DIST,stage2,False,NONE,0.99,,Value '10 patients' is present in the normal samples and matches the expected format; no cross-column inconsistency detected.
+710,ZipCode,36x78,FI,stage1,True,FI,0.95,,"Contains non-digit 'x', all normal samples are 5-digit numbers; no obvious correct digit, likely typo but ambiguous fix."
+710,HospitalName,communixy hospixal inc,T,stage1,True,T,0.99,community hospital inc,"Two 'x' should be 't' (communixy→community, hospixal→hospital), matching high-frequency correct name."
+711,Score,1xx%,FI,stage1,True,FI,1.0,100%,"Contains non-numeric 'xx', violating percentage format; likely OCR error of '100%'."
+711,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,1.0,,Value exactly matches a normal sample; no error.
+711,HospitalType,acute care hospitals,DIST,stage2,False,NONE,1.0,,"Value is standard 'acute care hospitals', present in normal samples."
+712,Condition,surgical infection xrevention,FI,stage1,True,T,0.95,surgical infection prevention,"'xrevention' is a typo for 'prevention', matching the known condition 'surgical infection prevention'."
+712,Score,empty,MV,stage1,True,MV,1.0,,'empty' is a missing value sentinel; the true score is absent (sample size 0).
+712,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.99,,'voluntary non-profit - private' is a valid category present in the normal samples; no cross-column inconsistency detected.
+713,PhoneNumber,33x28365x1,FI,stage1,True,FI,0.99,,包含字母'x'，不符合10位纯数字格式；无法推断正确号码
+713,MeasureName,surgery paxienxs needing hair removed from xhe surgical area before surgery who had hair removed using a safer mexhod (elecxric clippers or hair removal cream c nox a razor),VAD,stage1,True,T,0.99,surgery patients needing hair removed from the surgical area before surgery who had hair removed using a safer method (electric clippers or hair removal cream c not a razor),"与MeasureCode对应的标准措辞相比存在多处拼写错误（paxienxs->patients, xhe->the, mexhod->method, elecxric->electric, nox->not），判定为typo而非跨列依赖违反"
+715,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.98,,当前值完全匹配正常样例之一，无拼写错误，且与同行其他列无冲突。
+716,Condition,heartxattack,FI,stage1,True,T,0.95,heart attack,"'heartxattack' contains an extra 'x', typo for 'heart attack', consistent with MeasureName 'heart attack patients given aspirin at arrival'."
+717,MeasureCode,ami-2,DIST,stage2,False,NONE,0.95,,MeasureCode 'ami-2' appears in normal samples and matches the heart attack condition; flagged distribution anomaly is a false positive.
+718,Score,x7%,FI,stage1,True,FI,0.9,7%,格式错误，应为纯数字百分比，多余字符'x'。
+718,MeasureCode,amx-3,VAD,stage1,True,VAD,0.99,ami-3,违反跨列依赖：Stateavg为'al_ami-3'，且MeasureName对应的正确编码为'ami-3'。
+721,ProviderNumber,100x5,FI,stage1,True,FI,0.95,,ProviderNumber应为5位纯数字，但出现字母'x'，格式错误
+721,Score,empty,MV,stage1,True,MV,1.0,,Score值为'empty'是明确的缺失哨兵，且Sample为0 patients，无法推断有效百分比
+721,Stateavg,al_amx-7a,VAD,stage1,True,T,0.99,al_ami-7a,'amx'应为'ami'的拼写错误，与同行State='al'和MeasureCode='ami-7a'一致
+722,Score,empty,MV,stage1,False,NONE,0.85,,样本数为0，缺失得分合理，并非错误
+722,CountyName,cxllman,T,stage1,True,T,0.99,cullman,与City名'cullman'及医院名不一致，编辑距离为1的拼写错误
+724,ProviderNumber,1xx35,FI,stage1,True,FI,0.95,,"Contains non-digit characters 'xx', violating the 5-digit numeric format observed in all normal samples."
+727,Condition,pneumonia,DIST,stage2,False,NONE,0.95,,值'pneumonia'为正确拼写，出现在正常样例中，且与MeasureCode和MeasureName一致。
+727,MeasureName,pneumonia patients assessed and given pneumococcal vaccination,DIST,stage2,False,NONE,0.95,,完整MeasureName在正常样例中，且与Condition和MeasureCode匹配。
+728,Condition,pneumonia,DIST,stage2,False,NONE,0.95,,Value 'pneumonia' is correctly spelled and appears in the normal samples; the deviation flag is likely a false positive due to distribution imbalance.
+729,HospitalType,acutexcarexhospitals,FI,stage1,True,T,0.95,acute care hospitals,明显拼写错误，正确值应为 'acute care hospitals'
+729,MeasureCode,px-4,VAD,stage1,True,VAD,0.95,pn-4,与同行 MeasureName 及 Stateavg('al_pn-4')不一致，应为 'pn-4'
+730,CountyName,cxllman,T,stage1,True,T,0.99,cullman,与City的cullman和正常县名cullman相比，仅错用x代替a，为明显拼写错误。
+730,HospitalName,cullmxn regionxl medicxl center,VAD,stage1,True,T,0.99,cullman regional medical center,"存在多个拼写错误（cullmxn->cullman, regionxl->regional, medicxl->medical），将x误拼为a，尽管因拼写错误导致与ProviderNumber 10035的典型名称不一致，本质是拼写错误而非真正的跨列依赖违反。"
+731,MeasureCode,pn-6,DIST,stage2,False,NONE,0.95,,该值 'pn-6' 出现在同列的正常样例中，符合该列编码规范，为常见取值，前序标记为误报。
+732,CountyName,cullman,DIST,stage2,False,NONE,0.95,,"城市与郡同名(Cullman, AL)，符合地理常识，非错误"
+732,Condition,pneumonia,DIST,stage2,False,NONE,0.98,,正确拼写，且与同行的MeasureCode/MeasureName一致
+733,Condition,suxgical infection pxevention,FI,stage1,True,T,0.95,surgical infection prevention,拼写错误：'suxgical'应为'surgical'，'pxevention'应为'prevention'
+733,MeasureCode,scip-card-2,DIST,stage2,False,NONE,0.99,,该值出现在正常样例中，且与同行MeasureName一致，符合SCIP-Card-2指标
+735,MeasureCode,scix-inf-2,VAD,stage1,True,T,0.95,scip-inf-2,'scix' 疑似 'scip' 的拼写错误，与 MeasureName 对应的常见代码一致
+736,City,cuxxman,T,stage1,True,T,0.98,cullman,"Obvious typo for 'cullman', consistent with HospitalName, CountyName, and State."
+736,Address,1912xalabamaxhighwayx157,VAD,stage1,True,FI,0.99,1912 alabama highway 157,"Uses 'x' as separator instead of spaces, producing invalid format; expected '1912 alabama highway 157' per ProviderNumber context."
+737,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，score必然不适用，'empty'为合理占位符，非缺失错误
+744,HospitalOwner,prxprietary,FI,stage1,True,FI,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+744,Score,empty,MV,stage1,True,MV,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+744,CountyName,covington,DIST,stage2,True,OTHER,0.5,,LLM 未返回该格判定，沿用前序结果（兜底）。
+746,Score,empty,MV,stage1,False,NONE,0.95,,Score为空是因为样本数为0，属于正常现象，非错误。
+746,Stateavg,al_ami-7a,DIST,stage2,False,NONE,0.99,,Stateavg由State和MeasureCode派生，al_ami-7a完全正确。
+747,Score,empty,MV,stage1,True,MV,0.99,,Score值为'empty'，明确缺失哨兵，且Sample为0 patients，合理为空，但应留空而非占位文本。
+747,MeasureCode,ami-8a,DIST,stage2,False,NONE,0.95,,MeasureCode 'ami-8a' 与Condition 'heart attack' 及MeasureName一致，且Stateavg包含该代码，合法有效，前序分布标记为误报。
+749,MeasureCode,hx-2,VAD,stage1,True,T,0.95,hf-2,MeasureName对应正确代码为hf-2，hx-2为拼写错误，且Stateavg为'al_hf-2'佐证。
+750,ZipCode,3642x,FI,stage1,True,FI,0.98,36420,ZipCode应全为数字，当前值含字母'x'；根据城市andalusia和州al，正确邮编应为36420
+751,PhoneNumber,334xxx8466,FI,stage1,True,FI,0.95,,"Value contains non-numeric characters 'xxx', should be 10-digit number"
+752,CountyName,coxington,T,stage1,True,T,0.95,covington,"Andalusia, AL is in Covington County, 'coxington' is likely a typo with edit distance 1."
+754,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,"Current value 'acute care hospitals' matches the standard form in normal samples; it is the correct value, not an error. The prior flag is a false positive."
+755,ProviderNumber,1xx36,FI,stage1,True,FI,0.95,,ProviderNumber包含非数字字符'xx'，与正常样例均为5位纯数字的格式不符。
+756,City,andaluxia,T,stage1,True,T,0.95,andalusia,"HospitalName contains 'andalusia', and 'andaluxia' is a likely typo (1 char difference)."
+758,HospitalName,andaxusia regionax hospitax,VAD,stage1,True,T,0.95,andalusia regional hospital,拼写错误：andaxusia应为andalusia，regionax应为regional，hospitax应为hospital，与城市名andalusia及依赖规则一致
+758,City,andalusia,DIST,stage2,False,NONE,0.99,,正确的城市，邮编36420对应阿拉巴马州Andalusia，与State=al一致
+760,Stateavg,al_scipxinfx2,FI,stage1,True,FI,0.95,al_scip-inf-2,格式不符正常模式al_MeasureCode，应为al_scip-inf-2，当前值包含多余的'x'
+760,MeasureCode,scip-inf-2,DIST,stage2,False,NONE,0.9,,与MeasureName语义匹配，虽分布罕见但非错误
+762,Score,empty,MV,stage1,False,NONE,0.9,,Sample为0 patients，Score为empty表示数据不可用，符合业务逻辑，并非缺失错误
+762,CountyName,covington,DIST,stage2,False,NONE,0.95,,covington在正常样本中出现，是合法值，前序标记为误报
+762,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,proprietary在正常样本中出现，是合法值，前序标记为误报
+763,PhoneNumber,33422284xx,FI,stage1,True,FI,0.95,,PhoneNumber应为10位数字，但当前值包含'xx'非数字字符，不符合格式规范。
+764,State,xl,VAD,stage1,True,T,0.95,al,City 'andalusia' and ZipCode '36420' correspond to Alabama; 'xl' is a typo for 'al'
+764,Stateavg,al_scix-vte-1,VAD,stage1,True,T,0.95,al_scip-vte-1,Typo in suffix: 'scix' should be 'scip' to match MeasureCode
+765,HospitalName,andaluxia regional hoxpital,T,stage1,True,T,0.95,andalusia regional hospital,城市名'andalusia'与医院名中'andaluxia'高度相似，且'hoxpital'为'hospital'的典型拼写错误；与正常值'andalusia regional hospital'编辑距离小。
+766,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,值出现在正常样例中，且与同行其他列一致，无错误。
+766,MeasureName,children who received reliever medication while hospitalized for asthma,DIST,stage2,False,NONE,0.95,,值与MeasureCode、Condition及Stateavg一致，语义合理，非错误。
+767,Address,301 east 1xth st,T,stage1,True,T,0.95,301 east 18th st,"Typo: '1xth' very likely should be '18th', matching a known frequent address in Anniston, AL."
+767,CountyName,calhoun,DIST,stage2,False,NONE,0.9,,"Calhoun is the correct county for Anniston, AL 36201; no error."
+769,Score,x3%,FI,stage1,True,FI,0.95,,"Value 'x3%' does not match the required percentage pattern (digits followed by '%'). The leading 'x' is invalid, but the intended value is ambiguous (e.g., 93% or 83%), so fix cannot be determined."
+770,Score,empty,MV,stage1,True,MV,0.95,,"'empty' is a missing value indicator; Sample is 0 patients so score is not applicable, should be null."
+770,HospitalOwner,proprietary,DIST,stage2,False,NONE,1.0,,"'proprietary' is a valid and common owner type, present in normal samples; no inconsistency."
+772,City,annxston,T,stage1,True,T,0.95,anniston,"与高频值'anniston'编辑距离1，且ZipCode 36201对应Anniston, AL，确认拼写错误。"
+772,CountyName,calhoun,DIST,stage2,False,NONE,0.9,,"Calhoun County是阿拉巴马州真实县，与City=Anniston, State=AL一致，前序分布异常标记为误报。"
+774,Condition,children s asthma care,FI,stage1,False,NONE,0.99,,该值在正常样例中存在，是有效的医疗条件，前序标记为误报
+774,Sample,193 patients,DIST,stage2,False,NONE,0.99,,样本量193可能，符合格式，无其他错误迹象，仅因分布异常被标记
+775,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,matches a valid normal sample and is consistent with MeasureCode cac-2 and Stateavg al_cac-2
+775,MeasureName,children who received systemic corticosteroid medication (oral and iv medication that reduces inflammation and controls symptoms) while hospitalized for asthma,DIST,stage2,False,NONE,0.95,,description aligns with Condition and MeasureCode; not obviously invalid despite being a long text; no contradictory evidence in row context
+776,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,正常样例中包含此值，且与度量名称(MesureName)一致，属于有效条件。
+776,Sample,193 paxienxs,FI,stage1,True,T,0.99,193 patients,'paxienxs' 应为 'patients'，拼写错误。
+776,Score,14%,DIST,stage2,False,NONE,0.85,,虽远低于正常值，但百分比格式正确，且无跨列矛盾，可能为真实得分。
+777,HospitalName,huntsvxlle hospxtal,T,stage1,True,T,0.5,huntsville hospital,LLM 未返回该格判定，沿用前序结果（兜底）。
+779,HospitalType,acutexcarexhospitals,FI,stage1,True,T,0.95,acute care hospitals,Missing spaces and character substitutions compared to the standard form 'acute care hospitals'; consistent typo pattern in normal samples.
+779,MeasureName,heart attack patients given ace inhibitor or arb for left ventricular systolic dysfunction (lvsd),DIST,stage2,False,NONE,0.9,,Semantically consistent with Condition (heart attack) and MeasureCode (ami-3); no typo or format issue detected.
+780,ProviderNumber,1003x,FI,stage1,True,FI,0.95,,"ProviderNumber should be exactly 5 digits, but contains letter 'x'"
+780,Condition,heart attaxk,FI,stage1,True,T,0.99,heart attack,Typo: 'heart attaxk' vs. correct 'heart attack' (one character difference)
+781,State,al,DIST,stage2,False,NONE,1.0,,"State 'al' matches City 'huntsville' and ZipCode '35801' (Huntsville, AL), and is present in normal samples. Flag is false positive."
+782,HospitalType,acute care hospitaxs,FI,stage1,True,T,0.95,acute care hospitals,Typo: 'hospitaxs' should be 'hospitals'.
+782,Score,empty,MV,stage1,True,MV,0.99,,Missing value indicated by 'empty'.
+782,Condition,heart attack,DIST,stage2,False,NONE,0.99,,Value 'heart attack' is correct and consistent with MeasureCode.
+783,HospitalOwner,government - hospital district or authority,DIST,stage2,False,NONE,0.99,,该值完全匹配正常样例之一，且与同行其他列无冲突，前序标记为误报。
+784,HospitalOwner,goverxmext - hospital district or authority,FI,stage1,True,T,0.99,government - hospital district or authority,"'goverxmext' is a typo for 'government', standard value as in normal samples."
+785,CountyName,madisxn,T,stage1,True,T,0.95,madison,与高频值'madison'编辑距离1，且同州(AL)Huntsville所在的县为Madison，确认为typo。
+785,MeasureName,heaxt failuxe patients given an evaluation of left ventxiculax systolic (lvs) function,VAD,stage1,True,T,0.95,heart failure patients given an evaluation of left ventricular systolic (lvs) function,"存在多个拼写错误：heaxt->heart, failuxe->failure, ventxiculax->ventricular；虽违反与MeasureCode的依赖，但本质是文本中的typo。"
+786,PhoneNumber,2562651000,DIST,stage2,False,NONE,0.95,,Value is a valid 10-digit phone number and appears in normal samples; no error.
+786,State,al,DIST,stage2,False,NONE,0.99,,"State 'al' is correct and consistent with City, Zip, and Stateavg column."
+787,Stateavg,al_hf-x,FI,stage1,True,T,0.95,al_hf-4,Stateavg should match pattern al_<code>-<number>; 'hf-x' is likely a typo for 'hf-4' given MeasureCode is 'hf-4'.
+788,MeasureCode,pn-x,FI,stage1,True,FI,0.95,pn-2,"Value 'pn-x' does not match the expected pattern of letter(s)-dash-number[optional letters]; 'x' is not a digit, and Stateavg column implies correct code 'pn-2'."
+788,Condition,pneumonia,DIST,stage2,False,NONE,0.9,,"'pneumonia' is correctly spelled and appears in normal samples; consistent with MeasureName and Stateavg, no evidence of error."
+789,ProviderNumber,1xx39,FI,stage1,True,FI,0.95,,"ProviderNumber should be exactly 5 digits; '1xx39' contains non-digit characters 'xx', violating the format."
+791,State,xl,VAD,stage1,True,VAD,0.95,al,"Row context (City=Huntsville, Zip=35801, Stateavg='al_pn-5c') all indicate AL, and ProviderNumber history strongly supports AL; 'xl' is likely a typo for 'al'."
+793,ProviderNumber,100x9,FI,stage1,True,FI,0.95,,该值包含字母x，而ProviderNumber应为5位纯数字，正常样例均为数字，格式不符
+796,Stateavg,xl_scip-inf-2,FI,stage1,True,T,0.95,al_scip-inf-2,"Stateavg prefix should match state 'al' but is 'xl', likely typo"
+796,State,al,DIST,stage2,False,NONE,0.98,,"State is valid 'al' consistent with City and Zip, normal sample includes 'al', likely false positive"
+797,EmergencyService,yxs,VAD,stage1,True,T,0.95,yes,'yxs' 疑似 'yes' 的拼写错误，x 与 e 键盘邻近；同列正常样本含 yes/no，且同行上下文无其他冲突
+798,CountyName,madisox,T,stage1,True,T,0.95,madison,"City is Huntsville, AL, which is in Madison County. 'madisox' is one-char off from correct name."
+798,HospitalName,huntsville hospital,DIST,stage2,False,NONE,0.99,,Value appears in normal samples and is consistent with City.
+799,State,al,DIST,stage2,False,NONE,1.0,,"'al' matches City 'huntsville' and Stateavg prefix 'al_', consistent context; normal samples include 'al', flag likely false positive."
+800,State,al,DIST,stage2,False,NONE,0.98,,State值为'al'，与City 'huntsville'、ZipCode '35801'（阿拉巴马州Huntsville）完全一致，且正常样本中也包含'al'，无错误。
+802,MeasureName,heart attack patxents gxven aspxrxn at arrxval,DIST,stage2,True,T,0.95,heart attack patients given aspirin at arrival,"Multiple typos: patxents->patients, gxven->given, aspxrxn->aspirin, arrxval->arrival"
+802,Stateavg,al_ami-1,DIST,stage2,False,NONE,0.95,,"Value matches pattern State + MeasureCode: al_ami-1, consistent with other columns"
+808,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.98,,值在正常样本列表中，且与同行其他列无冲突，应为合法值。
+809,EmergencyService,xes,VAD,stage1,True,T,0.9,yes,值与'yes'仅一字符之差，且同医院多数记录为'yes'，判断为拼写错误。
+812,City,gadsden,DIST,stage2,False,NONE,0.95,,"City value 'gadsden' matches the State 'AL' and ZipCode '35903', and appears in the column's normal samples; it is a valid city in Alabama."
+812,Stateavg,al_hf-4,DIST,stage2,False,NONE,0.98,,"Stateavg 'al_hf-4' is correctly derived from State 'al' and MeasureCode 'hf-4', and exists in normal samples; it follows the expected pattern."
+814,HospitalType,axute care hospitals,FI,stage1,True,T,0.95,acute care hospitals,"'axute' is a typo for 'acute', as confirmed by normal samples; the correct phrase is 'acute care hospitals'."
+815,ZipCode,x590x,FI,stage1,True,FI,0.95,35901,"Value contains non-digit characters 'x', should be 5-digit ZIP; correct ZIP for Gadsden, AL is 35901."
+816,MeasureName,pneumonix pxtients given initixl antibiotic(s) within 6 hours after arrivxl,VAD,stage1,True,T,0.99,pneumonia patients given initial antibiotic(s) within 6 hours after arrival,"Multiple spelling errors: pneumonix->pneumonia, pxtients->patients, initixl->initial, arrivxl->arrival."
+816,Stateavg,al_pn-5c,DIST,stage2,False,NONE,0.95,,Value 'al_pn-5c' follows the pattern of normal samples (state abbreviation + measure code) and is consistent with State='al' and MeasureCode='pn-5c'.
+821,City,gxdsden,T,stage1,True,T,0.95,gadsden,与同行HospitalName中的'gadsden'及ZipCode对应城市gadsden不一致，明显为typo，编辑距离1
+821,HospitalName,gadsden regional medical center,DIST,stage2,False,NONE,0.9,,名称与地址城市完全一致，为真实存在的医院，无错误
+823,MeasureName,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,DIST,stage2,False,NONE,0.95,,值与MeasureCode和Condition一致，是SCIP-Inf-4指标的描述，虽然与正常样本中的其他指标名称不同，但语义合理，无格式或拼写错误。
+823,Stateavg,al_scip-inf-4,DIST,stage2,False,NONE,0.95,,格式与正常样本一致（州缩写_指标代码），且代码与MeasureCode匹配，是合理的州平均值编码。
+824,PhoneNumber,2564944xxx,FI,stage1,True,FI,0.95,,"Contains non-numeric characters 'xxx', does not conform to 10-digit phone number format."
+824,HospitalName,gadsden regional medical center,DIST,stage2,False,NONE,0.9,,Name matches city 'gadsden' and is plausible; no typo or inconsistency with other columns.
+827,Stateavg,xl_xmi-1,FI,stage1,True,T,0.95,al_ami-1,"Stateavg should match State prefix 'al_' and MeasureCode 'ami-1', but 'xl_xmi-1' appears to be a typo for 'al_ami-1'."
+827,MeasureCode,ami-1,DIST,stage2,False,NONE,0.98,,"MeasureCode 'ami-1' is consistent with Condition 'heart attack' and MeasureName; absence from normal samples is likely due to rarity, not an error."
+830,Score,empty,MV,stage1,True,MV,0.95,,"Score should be a percentage, but 'empty' is a missing placeholder; given Sample is '0 patients', score is not applicable, should be null/missing."
+832,Score,empty,MV,stage1,True,MV,0.95,,"'empty' is a missing value sentinel; Sample is '0 patients', so no score available. Should be null or empty string."
+832,Condition,heart attack,DIST,stage2,False,NONE,0.98,,Value 'heart attack' matches MeasureName and is among normal samples; no error.
+833,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0 patients，Score为空合理，并非错误缺失值。
+835,State,al,DIST,stage2,False,NONE,0.95,,State 'al' 与同行 City 'clanton'、CountyName 'chilton'、ZipCode '35045' 及 Stateavg 前缀 'al_' 一致，且为阿拉巴马州标准缩写，前序标记为误报
+842,MeasureCode,pnx6,FI,stage1,True,T,0.95,pn-6,Typo: 'x' should be '-' to match pattern 'pn-6'
+842,Stateavg,al_pnx6,FI,stage1,True,T,0.95,al_pn-6,Reflects MeasureCode typo; should be 'al_pn-6'
+845,Sample,4 patiexts,FI,stage1,True,T,0.99,4 patients,"Typo: 'patiexts' should be 'patients', matching normal pattern 'number + patients'."
+845,CountyName,chilton,DIST,stage2,False,NONE,0.95,,"Chilton is a valid county in Alabama; the city Clanton and state AL are consistent, no error."
+846,HospitalOwner,voluntaxy non-pxofit - pxivate,FI,stage1,True,FI,0.99,voluntary non-profit - private,"Typo in 'voluntary' and 'private', should match standard enum 'voluntary non-profit - private'"
+846,HospitalName,chilton medical center,DIST,stage2,False,NONE,0.95,,"Normal hospital name, matches city/clanton and county/chilton, no error"
+847,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,正常值，与同行上下文一致，且出现在正常样例列表中，无拼写或格式错误
+848,HospitalType,acute caxe hospitals,FI,stage1,False,NONE,1.0,,当前值 'acute caxe hospitals' 出现在正常样例中，属于该列常见合法变异，非错误。
+848,Score,empty,MV,stage1,True,MV,0.95,,'empty' 是明确的缺失哨兵，非百分比数值，且 Sample 为 0 patients 说明可能无数据，但仍为缺失。
+848,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,1.0,,当前值 'voluntary non-profit - private' 出现在正常样例中，是合法值。
+849,Address,x0x0 lay dam road,T,stage1,True,T,0.95,1010 lay dam road,'x0x0' 疑似占位符或错误，与已知该医院地址 '1010 lay dam road' 不符，且编辑距离近，结合城市与邮编一致，确为拼写错误。
+849,HospitalName,chilton medical center,DIST,stage2,False,NONE,0.98,,名称 'chilton medical center' 与该医院实际名称一致，且与城市 Clanton、县 Chilton 相符，为正常值，前序标记误报。
+850,Score,empty,MV,stage1,False,NONE,0.95,,当Sample为0患者时，Score显示为empty合理。
+851,Condition,surgical infxction prxvxntion,FI,stage1,True,T,0.95,surgical infection prevention,"明显拼写错误：'infxction' -> 'infection', 'prxvxntion' -> 'prevention'，与正确条件仅少量字符差异。"
+851,Score,empty,MV,stage1,False,NONE,0.9,,同行Sample列值为'0 patients'，表示无样本，Score无法计算，用'empty'作为缺失哨兵合理，非错误。
+855,PhoneNumber,x059x16x00,FI,stage1,True,FI,0.99,,包含字母'x'，不符合北美10位数字电话号码格式
+855,Score,empty,MV,stage1,True,MV,1.0,,'empty'是缺失值哨兵，不是有效的百分比分数
+855,City,hamilxon,T,stage1,True,T,0.99,hamilton,拼写错误，与州/邮编一致的正确城市为Hamilton，编辑距离1
+857,Score,empty,MV,stage1,True,MV,0.95,,"Score is 'empty', a missing value sentinel, consistent with Sample being 0 patients."
+857,Address,1256 military street sxuth,T,stage1,True,T,0.99,1256 military street south,"'sxuth' is a typo of 'south', as indicated by high-frequency correct address."
+858,Score,empty,MV,stage1,True,MV,0.95,,Score应为百分比格式，当前值为缺失哨兵'empty'，且同行Sample为0患者，无法计算有效分数，确认为缺失值。
+859,ProviderNumber,1xx44,FI,stage1,True,FI,0.95,,"ProviderNumber should be a 5-digit numeric string, but '1xx44' contains letters 'xx'."
+860,Score,80x,FI,stage1,True,T,0.95,80%,末尾 'x' 应为 '%'，匹配百分比格式，符合拼写错误特征
+864,HospitalType,acute care hospitals,DIST,stage2,False,NONE,0.95,,该值是标准医院类型，与正常样例中的正确形式一致，且跨列无冲突，前序标记疑为大量拼写错误导致的分布误报。
+865,PhoneNumber,20x9216200,FI,stage1,True,FI,0.95,2059216200,包含非法字符'x'，格式非纯数字；基于区域码和正常样本推测为2059216200
+865,MeasureCode,px-4,VAD,stage1,True,VAD,0.98,pn-4,与MeasureName及Stateavg不一致，应为pn-4
+866,Sample,121 patiexts,FI,stage1,True,T,0.98,121 patients,"'patiexts' is a typo of 'patients', expected format 'number patients'"
+866,EmergencyService,yxs,VAD,stage1,False,NONE,0.9,,Value 'yxs' present in normal samples; dependency violation weak (96% yes)
+866,ProviderNumber,10044,DIST,stage2,False,NONE,0.7,,"Format valid, within typical range; distribution anomaly insufficient"
+868,HospitalOwner,voluxtary xox-profit - private,FI,stage1,True,T,0.95,voluntary non-profit - private,"Typo: 'voluxtary' should be 'voluntary', 'xox-profit' should be 'non-profit'; matches normal sample 'voluntary non-profit - private'."
+869,Condition,surgical ixfectiox prevextiox,FI,stage1,True,T,0.95,surgical infection prevention,明显拼写错误，'ixfectiox'应为'infection'，'prevextiox'应为'prevention'，与标准条件'surgical infection prevention'高度相似且该行其他列合逻辑
+872,HospitalOwner,voluntaxy non-pxofit - pxivate,FI,stage1,True,T,0.95,voluntary non-profit - private,"Multiple typos: 'voluntaxy' -> 'voluntary', 'non-pxofit' -> 'non-profit', 'pxivate' -> 'private', matching a standard enum value."
+872,Sample,15 patiexts,FI,stage1,True,T,0.9,15 patients,"Typo: 'patiexts' should be 'patients', following the pattern '[number] patients'."
+872,PhoneNumber,2059216200,DIST,stage2,False,NONE,0.9,,The 10-digit number with area code 205 is valid and matches the state AL according to common area code assignments; no error detected.
+873,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，应为百分比数值或缺失，无法推断具体值
+873,MeasureName,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,DIST,stage2,False,NONE,0.9,,文本看似为合法的度量描述，与MeasureCode 'scip-inf-4' 可能匹配，且无拼写或格式错误，正常样例仅作参考，非错误
+874,Sample,19 patients,DIST,stage2,False,NONE,0.9,,"The value '19 patients' is larger than the provided normal samples (max 14), but there is no cross-column inconsistency or format violation; it is plausible for this hospital and measure."
+877,HospitalType,acute care hoxpitalx,FI,stage1,True,T,0.95,acute care hospitals,"Typo: 'hoxpitalx' should be 'hospitals', matching the standard form in normal samples."
+878,ProviderNumber,1xx45,FI,stage1,True,FI,0.95,,ProviderNumber contains letters 'xx' where only digits are expected.
+879,Score,0%,DIST,stage2,False,NONE,0.9,,"Sample size is 1, score 0% is plausible; no cross-column inconsistency with other fields."
+879,MeasureCode,ami-3,DIST,stage2,False,NONE,0.95,,"Consistent with Condition 'heart attack', MeasureName, and Stateavg 'al_ami-3'; code follows typical format even if not in normal samples."
+881,PhoneNumber,x0593x5966,FI,stage1,True,FI,0.95,,Contains non-numeric 'x' characters; valid phone numbers are 10-digit numeric per normal samples.
+882,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，且同行Sample为0 patients，分数缺失合理
+882,EmergencyService,yes,DIST,stage2,False,NONE,0.99,,'yes'是合法值，与正常样例中的'yes'完全一致，前序标记为误报
+883,PhoneNumber,x0593x5966,FI,stage1,True,FI,1.0,,"Value 'x0593x5966' contains letters, not a valid 10-digit phone number expected per normal samples."
+883,Score,empty,MV,stage1,True,MV,1.0,,Value 'empty' is a missing value sentinel; expected percentage like '100%'.
+884,State,xl,VAD,stage1,True,VAD,0.95,al,"ProviderNumber 10045 typically maps to 'al' (91%), and Stateavg is 'al_hf-1'; 'xl' is likely a typo for 'al'."
+885,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,当前值'yes'是该列的常见有效值之一（如正常样例所示），且与同行其它列（如医院类型为急性护理医院）一致，没有错误。
+886,State,xl,VAD,stage1,True,VAD,0.95,al,"跨列不一致：ZipCode 35555 属于 AL, Stateavg 前缀为 'al_'，且 ProviderNumber 10045 通常对应 State='al'，当前 'xl' 为笔误"
+888,ProviderNumber,x0045,FI,stage1,True,FI,0.9,,ProviderNumber应为5位纯数字，当前值含字母'x'，不符合列格式规范
+888,Score,x5%,FI,stage1,True,FI,0.85,,Score应为百分比数字后跟'%'，当前值含字母'x'，格式错误
+888,EmergencyService,yes,DIST,stage2,False,NONE,0.92,,值为'yes'，是EmergencyService列的合法取值，与正常样例一致且上下文无冲突，前序标记为误报
+889,EmergencyService,yex,VAD,stage1,True,T,0.95,yes,该医院同ProviderNumber下的 EmergencyService 多数为 'yes'，当前值 'yex' 极可能是拼写错误（typo），与 'yes' 仅一字之差。
+889,PhoneNumber,2059325966,DIST,stage2,False,NONE,0.8,,"区号 205 是阿拉巴马州常见区号，号码格式为10位数字，与正常样例一致，且城市 Fayette, AL 位于区号205范围内，无明显错误。"
+893,MeasureName,pneumonia patients assessed and given influenza vaxxination,T,stage1,True,T,0.99,pneumonia patients assessed and given influenza vaccination,"显然的拼写错误: 'vaxxination' 应为 'vaccination', 与高频正确值一致"
+894,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0患者，得分缺失合理，非错误
+895,Score,empty,MV,stage1,True,MV,0.95,,Score 为字符串 'empty'，同类正常值为百分比格式，且同行样本数为 0 patients，无法填补，视为缺失值。
+895,City,faxette,T,stage1,True,T,0.9,fayette,'faxette' 与高频值 'fayette' 编辑距离为 1，且同行 HospitalName 及 CountyName 均指向 Fayette，确为拼写错误。
+895,CountyName,fayexxe,T,stage1,True,T,0.9,fayette,'fayexxe' 与正确值 'fayette' 编辑距离为 2，州内存在 Fayette County，应纠正。
+896,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，且Sample为'0 patients'，可能无评分，但不应使用'empty'而应留空或标注。
+897,Score,empty,MV,stage1,True,MV,0.95,,Score值为缺失哨兵 'empty'，应视为缺失值
+897,EmergencyService,yes,DIST,stage2,False,NONE,0.99,,EmergencyService值为 'yes'，属于正常合法值，并非错误
+898,Score,empty,MV,stage1,False,NONE,0.95,,Sample为0患者，Score应为空，‘empty’是合理的缺失表示，非错误。
+898,MeasureName,all heart surgery patients whose blood sugar (blood glucose) is kept under good control in the days right after surgery,DIST,stage2,False,NONE,0.9,,该名称与Condition及MeasureCode一致，是合法的SCIP指标描述，仅因分布罕见被标记，非错误。
+899,Sample,7 patients,DIST,stage2,False,NONE,0.95,,格式与正常样例一致，数值处于合理范围，无跨列矛盾，标记为误报。
+902,HospitalType,acutexcarexhospitals,FI,stage1,True,T,0.95,acute care hospitals,"Typo of 'acute care hospitals', with 'x' replacing spaces and letters"
+902,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,"Value 'children s asthma care' is present in normal samples, indicating it is a valid condition"
+903,Condition,children s asthma care,FI,stage1,False,NONE,0.98,,正常样例中明确包含该值，属于合法医疗条件，前序标记为误报。
+903,HospitalName,rivxrvixw rxgional mxdical cxntxr,DIST,stage2,True,T,0.95,Riverview Regional Medical Center,名称中多个字符被替换为x，疑似拼写错误，最可能为Riverview Regional Medical Center。
+904,Condition,children s asthma care,FI,stage1,False,NONE,0.95,,该值出现在正常样例列表中，是有效条件之一，无格式错误
+904,MeasureName,children and their caregivers who received a home management plan of care document while hospitalized for asthma,DIST,stage2,False,NONE,0.9,,测量名称与同行Condition和MeasureCode语义一致，非错误
+905,Sample,126 patxents,FI,stage1,True,T,0.95,126 patients,patxents 是 patients 的拼写错误
+905,MeasureName,heart attack patients given aspirin at arrival,DIST,stage2,False,NONE,0.9,,与 MeasureCode ami-1 一致，语义通顺，非异常
+905,Stateavg,al_ami-1,DIST,stage2,False,NONE,0.95,,由州缩写和指标代码组成，与本行 State 和 MeasureCode 匹配
+911,HospitalOwner,proprietary,DIST,stage2,False,NONE,1.0,,Value 'proprietary' is present in the provided normal samples and is a valid hospital owner type; no issue detected.
+915,Address,600 souxh xhird sxreex,VAD,stage1,True,T,0.99,600 south third street,明显的拼写错误（typo）：'souxh' 应为 'south'，'xhird' 应为 'third'，'sxreex' 应为 'street'，与同 ProviderNumber 的正确地址完全一致。
+915,MeasureName,hearx failure paxienxs given smoking cessaxion advice/counseling,VAD,stage1,True,T,0.99,heart failure patients given smoking cessation advice/counseling,明显的拼写错误：'hearx' 应为 'heart'，'paxienxs' 应为 'patients'，'cessaxion' 应为 'cessation'，与 MeasureCode 'hf-4' 对应的正确名称一致。
+916,PhoneNumber,x565435x00,FI,stage1,True,FI,0.9,,值含字母'x'，不符合北美纯数字10位电话号码格式
+917,CountyName,etowxh,T,stage1,True,T,0.95,etowah,'etowxh' 与高频值 'etowah' 编辑距离1，且所在城市 Gadsden 位于该州 Etowah 县，确认为拼写错误。
+917,HospitalName,riverview regional medical center,DIST,stage2,False,NONE,0.95,,"Riverview Regional Medical Center 是真实存在的医院，位于 Gadsden, AL 35901，与行中城市、州、邮编一致，无错误。"
+919,EmergencyService,yex,VAD,stage1,True,T,0.9,yes,"Likely typo: 'yex' vs 'yes'; adjacent keys, and provider history shows 93% 'yes'"
+920,Stateavg,alxpn-6,FI,stage1,True,T,0.95,al_pn-6,'alxpn-6'应为'al_pn-6'，'x'为下划线'_'的拼写错误，与State='al'和MeasureCode='pn-6'一致。
+921,EmergencyService,yxs,VAD,stage1,True,T,0.9,yes,该列合法值应为 yes/no，'yxs' 与 'yes' 仅差一个字符，且同院 ProviderNumber 10046 绝大多数记录为 'yes'，属拼写错误。
+921,HospitalName,xivexview xegional medical centex,DIST,stage2,True,T,0.95,Riverview Regional Medical Center,所有 'r' 被误录为 'x'，应为 'Riverview Regional Medical Center'，与该地址真实医院一致。
+922,HospitalName,riverview rexional medical center,T,stage1,True,T,0.95,riverview regional medical center,'rexional' 应为 'regional'，与高频正确值差一个字符，符合拼写错误特征。
+922,State,ax,VAD,stage1,True,VAD,0.98,al,"整行上下文（City='gadsden', ZipCode='35901', Stateavg 前缀 'al_'）均指向 Alabama，'ax' 与 'al' 仅一字母之差，且与 ProviderNumber 历史数据冲突，应为违反依赖或拼写错误。"
+923,ZipCode,3590x,FI,stage1,True,FI,0.95,35901,"Zip code contains non-numeric character 'x'; all normal samples are 5-digit numbers; Gadsden, AL typically uses 35901."
+926,HospitalType,acuxe care hospixals,FI,stage1,True,T,0.95,acute care hospitals,明显的拼写错误，与正确值 'acute care hospitals' 仅若干字符差异，且正常样本中包含正确形式。
+930,MeasureCode,amix1,FI,stage1,True,T,0.95,ami-1,"Typo: should be 'ami-1' (missing dash and 'x' instead of 'i'), matching condition 'heart attack' and measure name."
+930,Stateavg,al_ami-1,DIST,stage2,False,NONE,0.9,,"Consistent with State 'al' and expected MeasureCode 'ami-1'; format valid, only unseen in given normal samples."
+933,ProviderNumber,1xx47,FI,stage1,True,FI,0.95,,ProviderNumber应为5位数字，当前值'1xx47'包含非数字字符'x'，不符合格式规范。
+933,Condition,heart attack,DIST,stage2,False,NONE,0.98,,'heart attack'拼写正确，与同行MeasureName一致，且正常样例中包含相同值，应为误报。
+934,Address,515 miranda sx,T,stage1,True,T,0.5,515 miranda st,LLM 未返回该格判定，沿用前序结果（兜底）。
+935,Score,empty,MV,stage1,True,MV,0.9,,'empty'是缺失哨兵，不符合百分比格式，且样本数为0，应视为缺失
+935,Address,515 miranxa st,T,stage1,True,T,0.95,515 miranda st,与高频值'515 miranda st'仅差一个字符，极可能是拼写错误
+936,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is '0 patients', so Score is legitimately missing; 'empty' is a valid missing indicator, not an error."
+936,Stateavg,al_ami-8a,DIST,stage2,False,NONE,0.95,,"Stateavg 'al_ami-8a' is a composite key formed from State 'al' and MeasureCode 'ami-8a', consistent with row context and normal sample pattern."
+938,HospitalName,georgiaxa hospital,T,stage1,True,T,0.95,georgiana hospital,与城市 'georgiana' 一致，极可能为拼写错误，多出 'x'
+941,Score,90%,DIST,stage2,False,NONE,0.95,,Value 90% is present in normal samples and consistent with context; flagged as DIST but likely a false positive.
+943,CountyName,butxer,T,stage1,True,T,0.98,butler,"City georgiana and State AL with Zip 36033 correspond to Butler County, 'butxer' is a typo for 'butler'."
+945,Address,515 mirxndx st,T,stage1,True,T,0.95,515 miranda st,地址中的'mirxndx'与高频值'miranda'编辑距离仅2，结合医院名和城市均为'georgiana'，极可能为拼写错误。
+947,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'，不符合百分比格式，为缺失哨兵
+947,Sample,empty,MV,stage1,True,MV,0.95,,值为'empty'，不符合患者计数格式，为缺失哨兵
+948,Score,empty,MV,stage1,True,MV,1.0,,值为'empty'，是缺失哨兵，且该列正常值为百分比
+948,Sample,empty,MV,stage1,True,MV,1.0,,值为'empty'，是缺失哨兵，且该列正常值为患者数量
+949,HospitalType,acute care hosxitals,FI,stage1,True,T,0.95,acute care hospitals,Typo: 'hosxitals' should be 'hospitals'; normal samples show common misspellings but correct value is 'acute care hospitals'.
+949,Score,empty,MV,stage1,True,MV,1.0,,Missing value: Score is empty and should be a percentage score.
+949,Sample,empty,MV,stage1,True,MV,1.0,,Missing value: Sample is empty and should be patient count.
+949,City,geoxgiana,T,stage1,True,T,0.98,georgiana,Typo: 'geoxgiana' should be 'georgiana' matching hospital name and edit distance 1.
+950,Score,empty,MV,stage1,True,MV,1.0,,"Value 'empty' is a missing value sentinel, not a valid percentage score."
+950,Sample,empty,MV,stage1,True,MV,1.0,,"Value 'empty' is a missing value sentinel, not a valid patient count."
+950,Stateavg,al_scip-inf-3,DIST,stage2,False,NONE,0.95,,Value 'al_scip-inf-3' is consistent with the pattern 'al_{MeasureCode}' and the row's MeasureCode; not an error.
+951,Score,empty,MV,stage1,True,MV,0.95,,"Value is explicit missing sentinel 'empty', while valid values are percentage strings."
+951,Sample,empty,MV,stage1,True,MV,0.95,,"Value is explicit missing sentinel 'empty', while valid values are patient count strings."
+952,Score,empty,MV,stage1,True,MV,1.0,,Score 值为字符串 'empty'，表示数据缺失，不符合该列应有的百分比格式。
+952,Sample,empty,MV,stage1,True,MV,1.0,,Sample 值为字符串 'empty'，表示数据缺失，不符合该列应有的患者计数格式。
+953,Score,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，该列正常为百分比如'100%'，应视为缺失值
+953,Sample,empty,MV,stage1,True,MV,0.95,,值为缺失哨兵'empty'，该列正常为患者数量如'0 patients'，应视为缺失值
+954,Score,empty,MV,stage1,True,MV,0.99,,值为'empty'表示缺失，正常值应为百分比
+954,Sample,empty,MV,stage1,True,MV,0.99,,值为'empty'表示缺失，正常值应为患者数量
+955,ProviderNumber,1004x,FI,stage1,True,FI,0.9,10040,ProviderNumber 应为5位数字，当前值含字母'x'，不符合格式，疑似将数字0误打为x，且正常样例中有10040
+955,Condition,hexrt attxck,FI,stage1,True,T,0.95,heart attack,Condition 应为标准医疗条件'heart attack'，当前值'hexrt attxck'为明显拼写错误，且与同行 MeasureName 相符
+956,HospitalType,acute xare hospitals,FI,stage1,True,T,0.98,acute care hospitals,明显的拼写错误，'xare'应为'care'，与正确值仅字符替换差异，同列正常样本均为'acute care hospitals'或其相近变体。
+956,HospitalName,medixal xenter enterprise,T,stage1,True,T,0.99,medical center enterprise,与高频正确名称'medical center enterprise'高度相似，仅'c'被替换为'x'，编辑距离小；结合同City与ProviderNumber，确属拼写错误。
+956,Address,400xnxedwardsxstreet,VAD,stage1,True,T,0.97,400 n edwards street,应为'400 n edwards street'的变体，受同一错误模式影响（'x'替换字符/空格），符合该ProviderNumber对应的正确地址，非跨列依赖违反，而是地址自身拼写错误。
+957,Score,empty,MV,stage1,False,NONE,0.95,,Sample为'0 patients'，Score无意义，'empty'为合理缺失
+958,Score,empty,MV,stage1,True,MV,0.95,,值为'empty'缺失哨兵，与正常百分比格式不符，且Sample为0 patients，可能无数据
+958,Condition,heart attack,DIST,stage2,False,NONE,0.99,,'heart attack'在正常样例中明确存在，且与同行MeasureCode/MeasureName语义一致，前序标记为误报
+960,Score,empty,MV,stage1,True,MV,0.95,,'empty'为缺失哨兵，Sample为0 patients，Score应缺失
+960,City,enterprxse,T,stage1,True,T,0.95,enterprise,拼写错误，与高频值'enterprise'编辑距离1，且与HospitalName中的'enterprise'不一致
+960,Condition,heart attack,DIST,stage2,False,NONE,0.95,,'heart attack'是正确拼写，与度量名称和上下文一致，误报
+961,Score,empty,MV,stage1,True,MV,0.95,,值为 'empty'，是缺失值哨兵，正常值为百分比。
+961,MeasureName,heart attack patients given pci within 90 minutes of arrival,DIST,stage2,False,NONE,0.9,,该值描述与 Condition: heart attack 和 MeasureCode: ami-8a 匹配，属于合理指标名称，前序标记为误报。
+961,Stateavg,al_ami-8a,DIST,stage2,False,NONE,0.95,,格式为州缩写_测量代码，与本行 State: al 和 MeasureCode: ami-8a 一致，为合法值。
+962,HospitalName,medxcal center enterprxse,T,stage1,True,T,0.95,medical center enterprise,City为enterprise，名称应为'medical center enterprise'，当前值多处字符错乱
+964,HospitalType,acutexcarexhospitals,FI,stage1,True,T,0.95,acute care hospitals,当前值为'acute care hospitals'的拼写变体，应统一为规范形式
+966,CountyName,cxffee,T,stage1,True,T,0.99,coffee,"Typo: 'cxffee' vs. correct 'coffee' (Coffee County, AL). City Enterprise, ZIP 36330 confirms Coffee County."
+968,City,xntxrprisx,VAD,stage1,True,T,0.95,enterprise,City应为enterprise，当前值为明显拼写错误，与医院名和ProviderNumber历史数据一致
+972,Sample,27 paxienxs,FI,stage1,True,T,0.95,27 patients,明显的拼写错误，'paxienxs' 应为 'patients'，格式上符合数字+patients的模式
+972,MeasureName,surgery patients who were taking heart drugs called beta blockers before coming to the hospital who were kept on the beta blockers during the period just before and after their surgery,DIST,stage2,False,NONE,0.9,,该值是一条合理的措施描述，与同行其他列无矛盾，无错误迹象
+972,MeasureCode,scip-card-2,DIST,stage2,False,NONE,0.95,,'scip-card-2'出现在正常样例中，是一个有效的代码，此前标记为分布异常显属误报
+974,Condition,surgical xnfection prevention,FI,stage1,True,T,0.95,surgical infection prevention,"'xnfection' is a typo of 'infection', consistent with other typos in normal samples"
+974,MeasureName,surgery patients who were given the  right kind  of antibiotic to help prevent infection,DIST,stage2,False,NONE,1.0,,"This exact string appears in the normal_samples, indicating it is a valid value"
+976,HospitalType,acutexcarexhospitals,FI,stage1,False,NONE,0.95,,该值与正常样例中的已知变体完全一致，列中普遍存在拼写变体，不是错误。
+976,Score,empty,MV,stage1,False,NONE,0.95,,当Sample为'0 patients'时，Score缺失合理，'empty'是有效缺失表示。
+976,HospitalOwner,proprietary,DIST,stage2,False,NONE,0.95,,该值出现在提供的正常样例中，属于合法类别。
+981,Score,100%,DIST,stage2,False,NONE,0.95,,100% is a valid score in the normal samples and consistent with a small sample size of 2 patients.
+983,Score,empty,MV,stage1,False,NONE,0.95,,样本数为0，得分哨兵值'empty'合理，非缺失错误
+985,Score,empty,MV,stage1,False,NONE,0.95,,"Sample is '0 patients', so Score 'empty' is a valid missing indicator, not an error."
+985,City,onxonta,T,stage1,True,T,0.99,oneonta,"'onxonta' is a typo of 'oneonta', a city in AL with matching ZipCode 35121 and CountyName 'blount'."
+986,Score,empty,MV,stage1,True,MV,0.95,,Score为'empty'，是缺失占位符，样本数为0，但应使用空值或NULL而非'empty'字符串。
+986,Address,150 gilxreath drive,T,stage1,True,T,0.95,150 gilbreath drive,'gilxreath'与高频正确地址'gilbreath'仅差一个字母，为拼写错误。
+987,HospitalName,st vincents bxount,T,stage1,True,T,0.95,st vincents blount,'bxount' 与 CountyName 'blount' 不一致，且编辑距离接近高频值 'st vincents blount'
+988,EmergencyService,yes,DIST,stage2,False,NONE,0.95,,"'yes' is a valid emergency service indicator, present in normal samples; no cross-column inconsistency detected."
+991,PhoneNumber,2052743000,DIST,stage2,False,NONE,0.95,,电话号码格式与正常样例一致（均为10位连续数字），且区号205与所在州AL匹配，无其他异常。
+997,MeasureName,surgery pxtients who were txking hexrt drugs cxlled betx blockers before coming to the hospitxl who were kept on the betx blockers during the period just before xnd xfter their surgery,VAD,stage1,True,T,0.98,surgery patients who were taking heart drugs called beta blockers before coming to the hospital who were kept on the beta blockers during the period just before and after their surgery,"Numerous character substitutions (e.g., pxtients, txking, hexrt, cxlled, betx, hospitxl, xnd, xfter) make this a clear typo of the correct MeasureName for scip-card-2."
+997,Condition,surgical infection prevention,DIST,stage2,False,NONE,0.95,,"Value is exactly 'surgical infection prevention', which is a valid common condition, appears in normal samples, and is consistent with the MeasureCode scip-card-2. The prior flag is a false alarm."
+999,HospitalOwner,voluntary non-profit - private,DIST,stage2,False,NONE,0.99,,值在正常样例列表中，且与整行其他列无冲突，应为合法类别

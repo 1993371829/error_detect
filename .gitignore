@@ -1,0 +1,7 @@
+.env
+.rule_cache.json
+.stage3_cache.json
+__pycache__/
+*.pyc
+debug-*.log
+.idea/

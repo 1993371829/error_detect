@@ -1,0 +1,789 @@
+[
+  {
+    "column": "ProviderNumber",
+    "semantic_type": "provider_id",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^\\d{5}$"
+        },
+        "error_type": "FI",
+        "reason": "All values are exactly 5 digits"
+      },
+      {
+        "type": "numeric_range",
+        "spec": {
+          "min": 10001,
+          "max": 20018
+        },
+        "error_type": "FI",
+        "reason": "Numeric range observed from data"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "Provider number should not be null",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "HospitalName",
+    "semantic_type": "name",
+    "rules_kept": [
+      {
+        "type": "length",
+        "spec": {
+          "min": 16,
+          "max": 36
+        },
+        "error_type": "FI",
+        "reason": "根据长度统计和边缘样本，所有值长度在16到36之间"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "该列不应为空，数据中无非空记录",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "Address",
+    "semantic_type": "free_text",
+    "rules_kept": [
+      {
+        "type": "length",
+        "spec": {
+          "min": 1,
+          "max": 100
+        },
+        "error_type": "FI",
+        "reason": "Observed length range is 10-28, with reasonable tolerance for addresses up to 100 characters"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "Address column is semantically required",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "City",
+    "semantic_type": "city",
+    "rules_kept": [
+      {
+        "type": "length",
+        "spec": {
+          "min": 3,
+          "max": 12
+        },
+        "error_type": "FI",
+        "reason": "所有非空值长度在3到12之间"
+      }
+    ],
+    "semantic_notes": []
+  },
+  {
+    "column": "State",
+    "semantic_type": "state_code",
+    "rules_kept": [
+      {
+        "type": "value_set",
+        "spec": {
+          "values": [
+            "al",
+            "ak",
+            "xl",
+            "ax"
+          ]
+        },
+        "error_type": "FI",
+        "reason": "仅4个唯一值，应为枚举类别"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "无空值，推断该字段不允许为空",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "ZipCode",
+    "semantic_type": "zip_code",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^\\d{5}$"
+        },
+        "error_type": "FI",
+        "reason": "All sample values are 5-digit numbers"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "Zip code should not be null",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "CountyName",
+    "semantic_type": "county_name",
+    "rules_kept": [
+      {
+        "type": "length",
+        "spec": {
+          "min": 3,
+          "max": 11
+        },
+        "error_type": "FI",
+        "reason": "县名长度在3到11之间，包含空格"
+      }
+    ],
+    "semantic_notes": []
+  },
+  {
+    "column": "PhoneNumber",
+    "semantic_type": "phone_number",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^[2-9]\\d{9}$"
+        },
+        "error_type": "FI",
+        "reason": "所有样本均为10位数字，且首位为2-9，符合北美电话号码格式"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "列名为电话号码，不应包含空值",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "HospitalType",
+    "semantic_type": "hospital_type",
+    "rules_kept": [
+      {
+        "type": "value_set",
+        "spec": {
+          "values": [
+            "acute care hospitals"
+          ]
+        },
+        "error_type": "FI",
+        "reason": "所有样本均为该正确值或其打字错误，预期只有一个合法取值"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "医院类型不应为空",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "HospitalOwner",
+    "semantic_type": "hospital_owner_type",
+    "rules_kept": [
+      {
+        "type": "value_set",
+        "spec": {
+          "values": [
+            "proprietary",
+            "voluntary non-profit - private",
+            "voluntary non-profit - church",
+            "voluntary non-profit - other",
+            "government - federal",
+            "government - state",
+            "government - local",
+            "government - hospital district or authority"
+          ]
+        },
+        "error_type": "FI",
+        "reason": "有限枚举类型，标准值为8个"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "列不应为空",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "EmergencyService",
+    "semantic_type": "state_code",
+    "rules_kept": [
+      {
+        "type": "value_set",
+        "spec": {
+          "values": [
+            "yes",
+            "no",
+            "yxs",
+            "yex",
+            "xes",
+            "xo"
+          ]
+        },
+        "error_type": "FI",
+        "reason": "Only 6 unique values observed, forming an enumerated set."
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "EmergencyService should not be null as per semantic constraint",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "Condition",
+    "semantic_type": "medical_condition",
+    "rules_kept": [
+      {
+        "type": "value_set",
+        "spec": {
+          "values": [
+            "surgical infection prevention",
+            "heart attack",
+            "pneumonia",
+            "heart failure"
+          ]
+        },
+        "error_type": "FI",
+        "reason": "该列应该只包含这四个有效的医疗条件，其他值均为拼写错误"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "该列不应包含空值，语义约束",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "MeasureCode",
+    "semantic_type": "code",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^[a-z]+(-[a-z]+)*-([0-9]+[a-z]*)$"
+        },
+        "error_type": "FI",
+        "reason": "All observed values match pattern: lowercase letters with optional dash-separated segments, ending with dash-number[optional letters]."
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "This column is a code and should not be null.",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "MeasureName",
+    "semantic_type": "free_text",
+    "rules_kept": [
+      {
+        "type": "length",
+        "spec": {
+          "min": 46,
+          "max": 184
+        },
+        "error_type": "FI",
+        "reason": "基于列画像的最短和最长值设置长度约束"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "该列不应包含空值，实际数据无空值",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "column": "Score",
+    "semantic_type": "percentage_score",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^\\d{1,3}%$"
+        },
+        "error_type": "FI",
+        "reason": "Values are percentages (0%-100%) represented as one to three digits followed by '%'. Non-null values should match this pattern."
+      }
+    ],
+    "semantic_notes": []
+  },
+  {
+    "column": "Sample",
+    "semantic_type": "patient_count",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^\\d{1,4} patients$"
+        },
+        "error_type": "FI",
+        "reason": "绝大部分值都是数字+空格+patients，数字1-4位"
+      }
+    ],
+    "semantic_notes": []
+  },
+  {
+    "column": "Stateavg",
+    "semantic_type": "code",
+    "rules_kept": [
+      {
+        "type": "regex",
+        "spec": {
+          "pattern": "^al_[a-z]+(-[a-z]+)*-\\d+[a-z]?$"
+        },
+        "error_type": "FI",
+        "reason": "格式为'al_'前缀、字母与连字符组成的中间部分、连字符、数字和可选字母后缀"
+      },
+      {
+        "type": "length",
+        "spec": {
+          "min": 7,
+          "max": 14
+        },
+        "error_type": "FI",
+        "reason": "观测长度范围在7到14之间"
+      }
+    ],
+    "semantic_notes": [
+      {
+        "type": "not_null",
+        "spec": {},
+        "error_type": "MV",
+        "reason": "状态指标列不应包含空值",
+        "enforced": false,
+        "note": "MV 由独立缺失值扫描负责，此规则仅作语义记录"
+      }
+    ]
+  },
+  {
+    "discovered_fds": [
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "HospitalName",
+        "confidence": 0.976,
+        "groups": 40
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "Address",
+        "confidence": 0.969,
+        "groups": 38
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "City",
+        "confidence": 0.967,
+        "groups": 41
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "State",
+        "confidence": 0.975,
+        "groups": 42
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "ZipCode",
+        "confidence": 0.97,
+        "groups": 40
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "CountyName",
+        "confidence": 0.961,
+        "groups": 40
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "PhoneNumber",
+        "confidence": 0.966,
+        "groups": 39
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "HospitalOwner",
+        "confidence": 0.973,
+        "groups": 40
+      },
+      {
+        "determinant": "ProviderNumber",
+        "dependent": "EmergencyService",
+        "confidence": 0.973,
+        "groups": 41
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "ProviderNumber",
+        "confidence": 0.972,
+        "groups": 41
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "Address",
+        "confidence": 0.97,
+        "groups": 39
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "City",
+        "confidence": 0.968,
+        "groups": 41
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "State",
+        "confidence": 0.975,
+        "groups": 42
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "ZipCode",
+        "confidence": 0.971,
+        "groups": 40
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "CountyName",
+        "confidence": 0.962,
+        "groups": 40
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "PhoneNumber",
+        "confidence": 0.967,
+        "groups": 39
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "HospitalOwner",
+        "confidence": 0.973,
+        "groups": 40
+      },
+      {
+        "determinant": "HospitalName",
+        "dependent": "EmergencyService",
+        "confidence": 0.974,
+        "groups": 41
+      },
+      {
+        "determinant": "Address",
+        "dependent": "ProviderNumber",
+        "confidence": 0.972,
+        "groups": 40
+      },
+      {
+        "determinant": "Address",
+        "dependent": "HospitalName",
+        "confidence": 0.977,
+        "groups": 39
+      },
+      {
+        "determinant": "Address",
+        "dependent": "City",
+        "confidence": 0.968,
+        "groups": 40
+      },
+      {
+        "determinant": "Address",
+        "dependent": "State",
+        "confidence": 0.974,
+        "groups": 41
+      },
+      {
+        "determinant": "Address",
+        "dependent": "ZipCode",
+        "confidence": 0.97,
+        "groups": 39
+      },
+      {
+        "determinant": "Address",
+        "dependent": "CountyName",
+        "confidence": 0.962,
+        "groups": 39
+      },
+      {
+        "determinant": "Address",
+        "dependent": "PhoneNumber",
+        "confidence": 0.968,
+        "groups": 39
+      },
+      {
+        "determinant": "Address",
+        "dependent": "HospitalOwner",
+        "confidence": 0.973,
+        "groups": 39
+      },
+      {
+        "determinant": "Address",
+        "dependent": "EmergencyService",
+        "confidence": 0.974,
+        "groups": 41
+      },
+      {
+        "determinant": "City",
+        "dependent": "State",
+        "confidence": 0.975,
+        "groups": 36
+      },
+      {
+        "determinant": "City",
+        "dependent": "CountyName",
+        "confidence": 0.964,
+        "groups": 34
+      },
+      {
+        "determinant": "City",
+        "dependent": "HospitalOwner",
+        "confidence": 0.905,
+        "groups": 32
+      },
+      {
+        "determinant": "City",
+        "dependent": "EmergencyService",
+        "confidence": 0.973,
+        "groups": 36
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "ProviderNumber",
+        "confidence": 0.949,
+        "groups": 39
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "HospitalName",
+        "confidence": 0.954,
+        "groups": 38
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "Address",
+        "confidence": 0.946,
+        "groups": 36
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "City",
+        "confidence": 0.967,
+        "groups": 41
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "State",
+        "confidence": 0.974,
+        "groups": 41
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "CountyName",
+        "confidence": 0.961,
+        "groups": 39
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "PhoneNumber",
+        "confidence": 0.944,
+        "groups": 37
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "HospitalOwner",
+        "confidence": 0.951,
+        "groups": 38
+      },
+      {
+        "determinant": "ZipCode",
+        "dependent": "EmergencyService",
+        "confidence": 0.974,
+        "groups": 40
+      },
+      {
+        "determinant": "CountyName",
+        "dependent": "State",
+        "confidence": 0.974,
+        "groups": 31
+      },
+      {
+        "determinant": "CountyName",
+        "dependent": "EmergencyService",
+        "confidence": 0.973,
+        "groups": 31
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "ProviderNumber",
+        "confidence": 0.972,
+        "groups": 41
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "HospitalName",
+        "confidence": 0.976,
+        "groups": 41
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "Address",
+        "confidence": 0.97,
+        "groups": 39
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "City",
+        "confidence": 0.969,
+        "groups": 41
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "State",
+        "confidence": 0.976,
+        "groups": 42
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "ZipCode",
+        "confidence": 0.97,
+        "groups": 40
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "CountyName",
+        "confidence": 0.961,
+        "groups": 40
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "HospitalOwner",
+        "confidence": 0.975,
+        "groups": 40
+      },
+      {
+        "determinant": "PhoneNumber",
+        "dependent": "EmergencyService",
+        "confidence": 0.974,
+        "groups": 41
+      },
+      {
+        "determinant": "MeasureCode",
+        "dependent": "Condition",
+        "confidence": 0.968,
+        "groups": 25
+      },
+      {
+        "determinant": "MeasureCode",
+        "dependent": "MeasureName",
+        "confidence": 0.964,
+        "groups": 24
+      },
+      {
+        "determinant": "MeasureCode",
+        "dependent": "Stateavg",
+        "confidence": 0.954,
+        "groups": 23
+      },
+      {
+        "determinant": "MeasureName",
+        "dependent": "Condition",
+        "confidence": 0.969,
+        "groups": 24
+      },
+      {
+        "determinant": "MeasureName",
+        "dependent": "MeasureCode",
+        "confidence": 0.971,
+        "groups": 24
+      },
+      {
+        "determinant": "MeasureName",
+        "dependent": "Stateavg",
+        "confidence": 0.955,
+        "groups": 23
+      },
+      {
+        "determinant": "Stateavg",
+        "dependent": "Condition",
+        "confidence": 0.969,
+        "groups": 24
+      },
+      {
+        "determinant": "Stateavg",
+        "dependent": "MeasureCode",
+        "confidence": 0.972,
+        "groups": 24
+      },
+      {
+        "determinant": "Stateavg",
+        "dependent": "MeasureName",
+        "confidence": 0.966,
+        "groups": 23
+      }
+    ]
+  }
+]

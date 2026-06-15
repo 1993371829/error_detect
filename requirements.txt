@@ -1,0 +1,11 @@
+# Stage 1 dependencies (ASCII-only; pip on Windows GBK cannot read UTF-8 comments)
+pandas>=2.0
+openai>=1.0
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# Stage 2 dependencies (GAN / DAE distribution anomaly layer)
+# CPU build is enough for this dataset:
+#   pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0
+numpy>=1.23
