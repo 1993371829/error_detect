@@ -4,8 +4,11 @@ openai>=1.0
 pyyaml>=6.0
 python-dotenv>=1.0
 
-# Stage 2 dependencies (GAN / DAE distribution anomaly layer)
-# CPU build is enough for this dataset:
+# Stage 2 dependencies (conditional-prediction anomaly layer)
+# CPU build:
 #   pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
+# GPU server build (pick cuXXX to match the server CUDA version, e.g. cu121):
+#   pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cu121
+# Stage 2 auto-detects GPU by default (model.device="auto"); override via: --device cuda|cpu
 torch>=2.0
 numpy>=1.23

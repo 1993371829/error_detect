@@ -47,6 +47,27 @@ def _seed_everything(seed: int) -> None:
     torch = _require_torch()
     np.random.seed(seed)
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def _resolve_device(pref: str) -> str:
+    """
+    解析设备偏好为实际设备字符串。
+        - "auto": 有 CUDA 用 "cuda"，否则 "cpu"（服务器零配置自动启用 GPU）。
+        - "cuda"/"cuda:0"/...: 显式使用 GPU；若环境无 CUDA 则回退 "cpu" 并告警。
+        - "cpu": 强制 CPU。
+    """
+    torch = _require_torch()
+    pref = (pref or "auto").lower()
+    if pref == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if pref.startswith("cuda"):
+        if torch.cuda.is_available():
+            return pref
+        print(f"  [CondPred] 警告: 指定 device={pref} 但未检测到 CUDA，回退 CPU。")
+        return "cpu"
+    return "cpu"
 
 
 class ConditionalPredictor:
@@ -65,6 +86,7 @@ class ConditionalPredictor:
         epochs / lr / batch_size: 训练超参。
         weight_decay: L2 正则（缓解键->值的过拟合记忆带来的过度自信）。
         seed / verbose: 复现与日志。
+        device: 计算设备偏好，"auto"（默认，有 GPU 自动用）/ "cuda" / "cpu"。
     """
 
     def __init__(
@@ -76,6 +98,7 @@ class ConditionalPredictor:
         weight_decay: float = 1e-5,
         seed: int = 0,
         verbose: bool = True,
+        device: str = "auto",
     ):
         self.hidden_dim = hidden_dim
         self.epochs = epochs
@@ -84,11 +107,12 @@ class ConditionalPredictor:
         self.weight_decay = weight_decay
         self.seed = seed
         self.verbose = verbose
+        self.device_pref = device
         self._encoder = None
         self._heads = None          # torch ModuleDict，键为 "h{idx}"
         self._specs = None
         self._head_key: dict[str, str] = {}   # col name -> head key
-        self._device = "cpu"
+        self._device = "cpu"        # 实际设备，fit() 时按 device_pref 解析
 
     # ------------------------------------------------------------------ build
     def _build(self, d: int):
@@ -155,6 +179,9 @@ class ConditionalPredictor:
         import torch.nn.functional as F
 
         _seed_everything(self.seed)
+        self._device = _resolve_device(self.device_pref)
+        if self.verbose:
+            print(f"  [CondPred] device={self._device}")
         self._specs = list(specs)
         d = x_clean.shape[1]
         self._encoder, self._heads = self._build(d)

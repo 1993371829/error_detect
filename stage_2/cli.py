@@ -3,13 +3,19 @@ Stage 2 命令行入口：统一条件预测模型的分布/冲突异常检测�
 
 前置条件:
     pip install -r requirements.txt
+    # CPU:
     pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
+    # GPU 服务器（按实际 CUDA 版本选择 cuXXX，如 cu121）:
+    pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cu121
     先完成 Stage 1（产出 output/mask/{dataset}_clean_mask.csv 等）
 
 运行命令（PowerShell，项目根目录）:
 
     python -m stage_2.cli --input data/hospital_dirty.csv
     python -m stage_2.cli --input data/flights_dirty.csv
+
+    # GPU/CPU 选择（默认 auto：有 GPU 自动用，无则 CPU）
+    python -m stage_2.cli --input data/movies_dirty.csv --device cuda
 
     # 调阈值
     python -m stage_2.cli --input data/hospital_dirty.csv --quantile 0.9 --abs-prob-floor 0.1
@@ -54,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-cardinality", type=int, default=None,
                         help="类别列 one-hot 身份上限（超过走 surrogate）")
     parser.add_argument("--epochs", type=int, default=None, help="训练轮数")
+    parser.add_argument("--device", default=None, choices=["auto", "cpu", "cuda"],
+                        help="计算设备：auto（默认，有 GPU 自动用）/ cuda / cpu")
     return parser
 
 
@@ -87,6 +95,8 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.encoding.max_cardinality = args.max_cardinality
     if args.epochs is not None:
         cfg.model.epochs = args.epochs
+    if args.device is not None:
+        cfg.model.device = args.device
     return cfg
 
 

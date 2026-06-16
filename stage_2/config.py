@@ -43,6 +43,7 @@ class ModelConfig:
     batch_size: int = 256
     weight_decay: float = 1e-5
     seed: int = 0
+    device: str = "auto"  # 计算设备：auto（有 GPU 自动用）/ cuda / cpu
 
 
 @dataclass
