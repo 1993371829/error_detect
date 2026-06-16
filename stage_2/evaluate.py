@@ -7,9 +7,8 @@ Stage 2 评估：以 clean vs dirty 的逐单元格差异为 ground truth，
     - 数值列 / 类别列分组的 P/R/F1。
 
 用法:
-    python -m stage_2.evaluate
-    python -m stage_2.evaluate --clean data/hospital_clean.csv --dirty data/hospital_dirty.csv
-    python -m stage_2.evaluate --by-column        # 额外打印逐列召回明细
+    python -m stage_2.evaluate --dirty data/hospital_dirty.csv
+    python -m stage_2.evaluate --dirty data/hospital_dirty.csv --by-column
 """
 
 from __future__ import annotations
@@ -118,37 +117,47 @@ def per_column_report(name: str, cells: set, gt: set, kinds: dict) -> None:
 def main(argv: list[str] | None = None) -> None:
     cfg = Stage2Config()
     parser = argparse.ArgumentParser(description="Stage 2 evaluation")
-    parser.add_argument("--clean", default=cfg.paths.clean_csv)
-    parser.add_argument("--dirty", default=cfg.paths.input_csv)
-    parser.add_argument("--candidates", default=cfg.paths.candidates_out)
-    parser.add_argument("--combined", default=cfg.paths.combined_out)
-    parser.add_argument("--stage1-errors", default=cfg.paths.stage1_errors)
+    parser.add_argument("--dirty", default=None, help="脏表 CSV（指定后自动推导其余路径）")
+    parser.add_argument("--dataset", default=None, help="显式指定数据集名")
+    parser.add_argument("--clean", default=None, help="评估用 clean CSV")
+    parser.add_argument("--candidates", default=None, help="Stage2 候选 CSV")
+    parser.add_argument("--combined", default=None, help="合并候选 CSV")
+    parser.add_argument("--stage1-errors", default=None, help="Stage1 错误 CSV")
     parser.add_argument("--by-column", action="store_true",
                         help="额外打印融合/DIST 候选的逐列召回明细")
     args = parser.parse_args(argv)
 
-    clean = read_table(args.clean)
-    dirty = read_table(args.dirty)
+    if args.dirty:
+        cfg.set_paths_from_dataset(args.dirty, dataset=args.dataset)
+
+    clean_path = args.clean or cfg.paths.clean_csv
+    dirty_path = args.dirty or cfg.paths.input_csv
+    candidates_path = args.candidates or cfg.paths.candidates_out
+    combined_path = args.combined or cfg.paths.combined_out
+    stage1_path = args.stage1_errors or cfg.paths.stage1_errors
+
+    clean = read_table(clean_path)
+    dirty = read_table(dirty_path)
     gt = ground_truth_cells(clean, dirty)
     kinds = classify_columns(clean)
     n_cat = sum(1 for c in gt if kinds.get(c[1]) == "categorical")
     n_num = len(gt) - n_cat
     print(f"Ground-truth 注入错误单元格: {len(gt)} (类别列 {n_cat} / 数值列 {n_num})\n")
 
-    if Path(args.stage1_errors).exists():
-        s1 = cells_from(read_table(args.stage1_errors))
+    if Path(stage1_path).exists():
+        s1 = cells_from(read_table(stage1_path))
         _report("Stage1(规则层)", s1, gt)
         _report_grouped("Stage1", s1, gt, kinds)
 
     dist = None
-    if Path(args.candidates).exists():
-        dist = cells_from(read_table(args.candidates))
+    if Path(candidates_path).exists():
+        dist = cells_from(read_table(candidates_path))
         _report("Stage2(DIST)", dist, gt)
         _report_grouped("Stage2(DIST)", dist, gt, kinds)
 
     comb = None
-    if Path(args.combined).exists():
-        comb = cells_from(read_table(args.combined))
+    if Path(combined_path).exists():
+        comb = cells_from(read_table(combined_path))
         _report("合并(S1+S2)", comb, gt)
         _report_grouped("合并(S1+S2)", comb, gt, kinds)
 

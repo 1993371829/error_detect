@@ -2,24 +2,24 @@
 
 本文档描述 Stage 1 / Stage 2 / Stage 3 三阶段表格错误检测的完整流程，便于后续召回、精度、成本与阈值优化。
 
-**典型运行顺序：**
+**典型运行顺序（路径由 `--input` 自动推导，PowerShell 一行命令）：**
 
-```bash
+```powershell
 # 1. Stage 1
-python main.py --input data/hospital_dirty.csv \
-  --output data/hospital_errors.csv \
-  --rules-out data/hospital_rules.json
+python main.py --input data/hospital_dirty.csv
 
-# 2. Stage 2（依赖 clean_mask）
-python -m stage_2.cli            # 统一条件预测模型（无需选择模式）
+# 2. Stage 2
+python -m stage_2.cli --input data/hospital_dirty.csv
 
-# 3. Stage 3（依赖 combined_candidates）
-python -m stage_3.cli
+# 3. Stage 3
+python -m stage_3.cli --input data/hospital_dirty.csv
 
 # 评估
-python -m stage_2.evaluate
-python -m stage_3.evaluate
+python -m stage_2.evaluate --dirty data/hospital_dirty.csv
+python -m stage_3.evaluate --dirty data/hospital_dirty.csv
 ```
+
+**目录布局：** `data/` 仅原始数据集；生成物写入 `output/mask|stage1|stage2|stage3/`；LLM 缓存写入 `cache/`。命名：`{dataset}_*.csv/json`（如 `hospital_clean_mask.csv`）。布局可在 [configs/default.yaml](configs/default.yaml) 的 `layout` 段配置。
 
 ---
 
@@ -34,7 +34,7 @@ flowchart LR
         S2["Stage 2 条件预测层<br/>P(列|其余列) · 无监督<br/>分布异常 + 键->值冲突"]
         S3["Stage 3 LLM 精检<br/>确认 · 分类 · 修复<br/>过滤误报"]
     end
-    IN["脏表 CSV"] --> S1 --> S2 --> S3 --> OUT["final_errors.csv"]
+    IN["脏表 CSV"] --> S1 --> S2 --> S3 --> OUT["output/stage3/{dataset}_final_errors.csv"]
 ```
 
 ---
@@ -51,8 +51,8 @@ flowchart LR
 | 缺失值扫描 | 独立检测 MV，不依赖 LLM |
 | 拼写错误检测 | 基于频次 + 编辑距离，发现低频值与高频锚点的近似拼写（T） |
 | 跨列依赖挖掘 | 近似函数依赖（FD）挖掘，发现如 ZipCode → City 的强依赖违反（VAD） |
-| 产出干净掩码 | 生成 `clean_mask.csv`，标记哪些单元格未被 Stage 1 检出，供 Stage 2 训练使用 |
-| 产出列语义类型 | 生成 `hospital_rules.json`，含每列 `semantic_type`，供 Stage 3 构造 prompt |
+| 产出干净掩码 | 生成 `output/mask/{dataset}_clean_mask.csv`，供 Stage 2 训练 |
+| 产出列语义类型 | 生成 `output/stage1/{dataset}_rules.json`，供 Stage 3 构造 prompt |
 
 **能检出的错误类型：**
 
@@ -74,11 +74,11 @@ flowchart LR
 |------|------|------|
 | 输入 | `data/hospital_dirty.csv` | 待检测脏表 |
 | 输入 | `configs/default.yaml`、`.env` | LLM 与规则执行参数 |
-| 输出 | `data/hospital_errors.csv` | 检出的错误单元格及类型、原因 |
-| 输出 | `data/hospital_rules.json` | 归纳规则与列语义类型 |
-| 输出 | `clean_mask.csv` | 布尔掩码，True=干净（Stage 2 必需） |
+| 输出 | `output/stage1/{dataset}_errors.csv` | 检出的错误单元格及类型、原因 |
+| 输出 | `output/stage1/{dataset}_rules.json` | 归纳规则与列语义类型 |
+| 输出 | `output/mask/{dataset}_clean_mask.csv` | 布尔掩码，True=干净（Stage 2 必需） |
 
-**关键机制：** `flagged_cells` 去重贯穿全流程；规则违反率超 30% 自动丢弃；LLM 规则按列画像 MD5 缓存至 `.rule_cache.json`。
+**关键机制：** `flagged_cells` 去重贯穿全流程；规则违反率超 30% 自动丢弃；LLM 规则按列画像 MD5 缓存至 `cache/rule_cache.json`。
 
 ---
 
@@ -101,7 +101,7 @@ flowchart LR
 | 条件建模 | 在整行干净样本上训练 `ConditionalPredictor`：屏蔽一列，用其余列预测它（masked-column） |
 | 似然打分 | 对全量行预测：类别 `-log P(观测值)`、数值标准化残差、surrogate 形态重构 MSE |
 | 双闸门筛选 | 逐列干净分位阈值 + 精度闸门 `margin`（备选类显著更优才报，并给 `suggested_fix`）+ 可预测性闸门（难预测列跳过） |
-| 与 Stage 1 合并 | 按 `(row_id, column)` 去重，Stage 1 优先，产出 `combined_candidates.csv` |
+| 与 Stage 1 合并 | 按 `(row_id, column)` 去重，Stage 1 优先，产出 `output/stage2/{dataset}_combined_candidates.csv` |
 
 **为什么替换旧的 DAE/GANomaly：** 旧版把高基数列（`flight`、各时刻列）一律丢进 surrogate 哈希通道，键与取值的**身份被抹掉**，无法学到 `flight -> time`，在 flights 上只会标记「长度异常的格式」而漏掉真正冲突，合并精度从 0.999 崩到 0.814。条件预测 + 身份保留编码从根本上解决该问题。
 
@@ -121,12 +121,12 @@ flowchart LR
 | 方向 | 文件 | 说明 |
 |------|------|------|
 | 输入 | `data/hospital_dirty.csv` | 待检测脏表 |
-| 输入 | `clean_mask.csv` | Stage 1 干净掩码（训练必需） |
-| 输入 | `data/hospital_errors.csv` | 用于合并去重 |
-| 输出 | `data/stage2_candidates.csv` | DIST 候选（含 `suggested_fix`、`subtype`: categorical/numeric/surrogate） |
-| 输出 | `data/combined_candidates.csv` | Stage1 ∪ Stage2 合并（**Stage 3 输入**） |
+| 输入 | `output/mask/{dataset}_clean_mask.csv` | Stage 1 干净掩码（训练必需） |
+| 输入 | `output/stage1/{dataset}_errors.csv` | 用于合并去重 |
+| 输出 | `output/stage2/{dataset}_stage2_candidates.csv` | DIST 候选（含 `suggested_fix`） |
+| 输出 | `output/stage2/{dataset}_combined_candidates.csv` | Stage1 ∪ Stage2 合并（**Stage 3 输入**） |
 
-**关键参数：** `quantile`（逐列干净分位阈值）、`margin`（类别精度闸门）、`min_predictability`（可预测性闸门，跳过标识列）、`max_cells_per_row`（每行 top-N，0=不限）。
+**关键参数：** `abs_prob_floor`（类别列绝对概率地板，召回主杠杆，默认 0.02）、`quantile`（逐列干净分位阈值，保精度）、`margin`（类别精度闸门）、`min_predictability`（可预测性闸门，跳过标识列）、`max_cells_per_row`（每行 top-N，0=不限）。
 
 ---
 
@@ -151,7 +151,7 @@ flowchart LR
 |---------|---------------------|------|
 | MV / FI / T / VAD | 维持或修正 | Stage 1 高置信结果，LLM 可确认或纠正 |
 | DIST | VAD / FI / OTHER / **NONE** | 分布层候选，LLM 结合跨列语义判断真伪 |
-| NONE | — | 误报否决，不进入 `final_errors.csv` |
+| NONE | — | 误报否决，不进入 `output/stage3/{dataset}_final_errors.csv` |
 
 **擅长与不擅长：**
 
@@ -162,12 +162,12 @@ flowchart LR
 
 | 方向 | 文件 | 说明 |
 |------|------|------|
-| 输入 | `data/hospital_dirty.csv` | 原始脏表（取整行上下文） |
-| 输入 | `data/combined_candidates.csv` | Stage1 ∪ Stage2 可疑候选 |
-| 输入 | `data/hospital_rules.json` | 列 `semantic_type` |
+| 输入 | `data/{dataset}_dirty.csv` | 原始脏表（取整行上下文） |
+| 输入 | `output/stage2/{dataset}_combined_candidates.csv` | Stage1 ∪ Stage2 可疑候选 |
+| 输入 | `output/stage1/{dataset}_rules.json` | 列 `semantic_type` |
 | 输入 | `.env` | LLM API 配置 |
-| 输出 | `data/stage3_results.csv` | 逐格判定明细（含 `is_error`、`confidence`、`llm_reason`） |
-| 输出 | `data/final_errors.csv` | **最终确认错误**（`is_error=True` 的格） |
+| 输出 | `output/stage3/{dataset}_stage3_results.csv` | 逐格判定明细（含 `is_error`、`confidence`、`llm_reason`） |
+| 输出 | `output/stage3/{dataset}_final_errors.csv` | **最终确认错误**（`is_error=True` 的格） |
 
 **建议用法：** 先 `--dry-run --limit 3` 确认 prompt，再全量运行；可用 `--limit N` 小规模试跑以控制成本。
 
@@ -184,7 +184,7 @@ flowchart LR
 | 成本 | LLM 规则归纳（可缓存） | CPU 训练（无 LLM） | LLM 按行精检（可缓存） |
 | 精度倾向 | 高 P，R ~85% | 中等 P，补召回 | 提升最终 P，输出可交付结果 |
 
-**数据依赖链：** Stage 1 必须先跑（产出 `clean_mask`）→ Stage 2 依赖 Stage 1 → Stage 3 依赖 Stage 2 的 `combined_candidates` 与 Stage 1 的 `rules.json`。评估脚本 `stage_2.evaluate` / `stage_3.evaluate` 需 `hospital_clean.csv` 作为 ground truth，不参与正式检测流程。
+**数据依赖链：** Stage 1 必须先跑（产出 `output/mask/{dataset}_clean_mask.csv`）→ Stage 2 → Stage 3。评估需 `data/{dataset}_clean.csv` 作为 ground truth。
 
 ---
 
@@ -198,19 +198,19 @@ flowchart TB
     end
 
     subgraph S1["Stage 1 — 规则层（高精度、可解释）"]
-        S1_OUT1["hospital_errors.csv"]
-        S1_OUT2["hospital_rules.json"]
-        S1_OUT3["clean_mask.csv"]
+        S1_OUT1["output/stage1/{dataset}_errors.csv"]
+        S1_OUT2["output/stage1/{dataset}_rules.json"]
+        S1_OUT3["output/mask/{dataset}_clean_mask.csv"]
     end
 
     subgraph S2["Stage 2 — 分布层（补软异常）"]
-        S2_OUT1["stage2_candidates.csv<br/>error_type=DIST"]
-        S2_OUT2["combined_candidates.csv"]
+        S2_OUT1["output/stage2/{dataset}_stage2_candidates.csv<br/>error_type=DIST"]
+        S2_OUT2["output/stage2/{dataset}_combined_candidates.csv"]
     end
 
     subgraph S3["Stage 3 — LLM 精检层（确认/分类/修复）"]
-        S3_OUT1["stage3_results.csv"]
-        S3_OUT2["final_errors.csv"]
+        S3_OUT1["output/stage3/{dataset}_stage3_results.csv"]
+        S3_OUT2["output/stage3/{dataset}_final_errors.csv"]
     end
 
     CSV --> S1
@@ -252,7 +252,7 @@ flowchart TD
     P1 --> CACHE{RuleCache<br/>画像 MD5 命中?}
     CACHE -->|命中| RULES["rule_spec (rules + semantic_type)"]
     CACHE -->|未命中| LLM1["LLM 规则归纳 llm_rules.py<br/>regex/value_set/length/numeric_range/not_null"]
-    LLM1 --> SAVE_CACHE["写入 .rule_cache.json"]
+    LLM1 --> SAVE_CACHE["写入 cache/rule_cache.json"]
     SAVE_CACHE --> RULES
 
     RULES --> FILTER1["过滤 not_null<br/>（MV 独立扫描，不执行）"]
@@ -275,9 +275,9 @@ flowchart TD
 
     LOOP_COL -->|列循环结束| TYPO["Typo 检测 typo_detect.py<br/>频次+编辑距离 → T<br/>跳过 flagged_cells"]
     TYPO --> FD["FD 挖掘 fd_detect.py<br/>近似函数依赖 → VAD<br/>跳过 flagged_cells"]
-    FD --> OUT1["errors.csv"]
-    FD --> OUT2["rules.json"]
-    FD --> OUT3["build_clean_mask → clean_mask.csv"]
+    FD --> OUT1["output/stage1/{dataset}_errors.csv"]
+    FD --> OUT2["output/stage1/{dataset}_rules.json"]
+    FD --> OUT3["build_clean_mask → output/mask/{dataset}_clean_mask.csv"]
 ```
 
 ### Stage 1 错误类型与模块对应
@@ -295,7 +295,7 @@ flowchart TD
 |------|------|
 | `profiling.py` | 列画像（统计，不调 LLM） |
 | `llm_rules.py` | LLM 规则归纳 + `LLMClient` |
-| `rule_cache.py` | 画像 MD5 → 规则缓存（`.rule_cache.json`） |
+| `rule_cache.py` | 画像 MD5 → 规则缓存（`cache/rule_cache.json`） |
 | `rule_guard.py` | 自由文本列丢弃过严 regex |
 | `rule_compiler.py` | JSON 规则 → 可执行校验函数 |
 | `typo_detect.py` | 频次 + Levenshtein → T |
@@ -316,7 +316,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START2(["python -m stage_2.cli"]) --> READ["读 dirty CSV + clean_mask.csv"]
+    START2(["python -m stage_2.cli"]) --> READ["读 dirty CSV + output/mask/{dataset}_clean_mask.csv"]
     READ --> CHECK["检查整行干净行数<br/>row_clean = mask.all(axis=1)"]
 
     CHECK --> ENC_FIT["TabularEncoder.fit<br/>仅用干净单元格估参"]
@@ -329,9 +329,9 @@ flowchart TD
     SCORE --> CELLSCORE["逐格分数<br/>类别 -log P(观测) / 数值残差 / surrogate MSE"]
 
     CELLSCORE --> GATE["双闸门：逐列干净分位阈值<br/>+ margin 精度闸门 + 可预测性闸门"]
-    GATE --> S2CSV["stage2_candidates.csv<br/>含 suggested_fix"]
+    GATE --> S2CSV["output/stage2/{dataset}_stage2_candidates.csv<br/>含 suggested_fix"]
     S2CSV --> MERGE["merge_candidates<br/>(row_id,column) 去重<br/>Stage1 优先"]
-    MERGE --> COMB["combined_candidates.csv<br/>+ source: stage1/stage2"]
+    MERGE --> COMB["output/stage2/{dataset}_combined_candidates.csv<br/>+ source: stage1/stage2"]
 ```
 
 ### Stage 2 设计要点
@@ -341,7 +341,7 @@ flowchart TD
 3. **身份保留编码**：键列（`flight`）/中等基数列（时刻）以 one-hot 身份进入并作类别目标，是学到 `P(time|flight)` 共识的前提
 4. **统一机制**：条件预测 `P(列|其余列)` 同时覆盖分布异常与键->值冲突，无需按数据集路由
 5. **双闸门控精度**：`margin`（备选类显著更优才报）+ `min_predictability`（难预测的标识列跳过）
-6. **召回/精度杠杆**：`quantile` / `margin` / `max_cells_per_row`，FP 交 Stage 3 过滤
+6. **召回/精度杠杆**：`abs_prob_floor`（召回主杠杆，类别列低概率即召回）/ `quantile` / `margin`，FP 交 Stage 3 过滤
 
 ### Stage 2 关键模块
 
@@ -376,8 +376,8 @@ flowchart TD
 flowchart TD
     START3(["python -m stage_3.cli"]) --> LOAD["load_contexts"]
     LOAD --> L1["读原始脏表"]
-    LOAD --> L2["读 combined_candidates.csv"]
-    LOAD --> L3["读 rules.json → semantic_type"]
+    LOAD --> L2["读 output/stage2/{dataset}_combined_candidates.csv"]
+    LOAD --> L3["读 output/stage1/{dataset}_rules.json → semantic_type"]
     LOAD --> L4["compute_normal_samples<br/>每列高频合法样例"]
 
     L1 & L2 & L3 & L4 --> GROUP["按 row_id 分组<br/>build_row_contexts → RowContext"]
@@ -390,7 +390,7 @@ flowchart TD
     ROW_LOOP --> PROMPT["build_prompt<br/>整行 JSON + 可疑格 + 正常样例"]
     PROMPT --> CACHE3{ResponseCache<br/>prompt 命中?}
     CACHE3 -->|是| RAW["LLM JSON 响应"]
-    CACHE3 -->|否| LLM3["LLMClient.complete<br/>.stage3_cache.json"]
+    CACHE3 -->|否| LLM3["LLMClient.complete<br/>cache/stage3_cache.json"]
     LLM3 --> RAW
 
     RAW --> PARSE["_parse_response → judgments"]
@@ -399,8 +399,8 @@ flowchart TD
     FALLBACK -->|无| FB["_fallback_judgment<br/>维持错误 conf=0.5"]
     FALLBACK -->|有| KEEP["采用 LLM 判定"]
 
-    FB & KEEP --> RESULTS["stage3_results.csv<br/>含 prior_* 与 llm_reason"]
-    RESULTS --> FINAL["is_error=True → final_errors.csv"]
+    FB & KEEP --> RESULTS["output/stage3/{dataset}_stage3_results.csv<br/>含 prior_* 与 llm_reason"]
+    RESULTS --> FINAL["is_error=True → output/stage3/{dataset}_final_errors.csv"]
 ```
 
 ### Stage 3 错误类型映射
@@ -420,7 +420,7 @@ flowchart TD
 | `context.py` | 按行分组，构造 `RowContext` / `SuspectCell` |
 | `prompt.py` | 渲染精检 prompt（整行 + 可疑格 + 正常样例） |
 | `verifier.py` | 调用 LLM、解析 JSON、规范化判定 |
-| `cache.py` | LLM 响应缓存（`.stage3_cache.json`） |
+| `cache.py` | LLM 响应缓存（`cache/stage3_cache.json`） |
 | `evaluate.py` | 精检前 vs 精检后 P/R/F1，Stateavg 误报专项 |
 
 ---
@@ -430,24 +430,24 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph 原始
-        D["hospital_dirty.csv"]
-        C["hospital_clean.csv<br/>（评估用 GT）"]
+        D["data/{dataset}_dirty.csv"]
+        C["data/{dataset}_clean.csv<br/>（评估用 GT）"]
     end
 
     subgraph Stage1产物
-        E1["hospital_errors.csv"]
-        R["hospital_rules.json"]
-        M["clean_mask.csv"]
+        E1["output/stage1/{dataset}_errors.csv"]
+        R["output/stage1/{dataset}_rules.json"]
+        M["output/mask/{dataset}_clean_mask.csv"]
     end
 
     subgraph Stage2产物
-        E2["stage2_candidates.csv"]
-        COMB["combined_candidates.csv"]
+        E2["output/stage2/{dataset}_stage2_candidates.csv"]
+        COMB["output/stage2/{dataset}_combined_candidates.csv"]
     end
 
     subgraph Stage3产物
-        RES["stage3_results.csv"]
-        FIN["final_errors.csv"]
+        RES["output/stage3/{dataset}_stage3_results.csv"]
+        FIN["output/stage3/{dataset}_final_errors.csv"]
     end
 
     D --> E1 & R & M
@@ -491,10 +491,10 @@ flowchart LR
     O2["② Typo 阈值<br/>anchor_ratio / distance"] -->|提 T 召回| P1
     O3["③ FD 门槛<br/>pure_group_ratio 等"] -->|控 VAD 误报| P1
     O4["④ 编码器<br/>身份保留 / 基数上限"] -->|提 DIST 召回| P2
-    O5["⑤ quantile + margin"] -->|DIST 精度/召回权衡| P2
+    O5["⑤ abs_prob_floor + quantile"] -->|DIST 精度/召回权衡| P2
     O6["⑥ min_predictability"] -->|跳过标识列控误报| P2
     O7["⑦ Stage3 prompt<br/>跨列一致性规则"] -->|化解 DIST 误报| P3
-    O8["⑧ 缓存策略<br/>.rule_cache / .stage3_cache"] -->|降 LLM 成本| COST
+    O8["⑧ 缓存策略<br/>cache/rule_cache / stage3_cache"] -->|降 LLM 成本| COST
 
     P1["Stage 1"]
     P2["Stage 2"]
@@ -508,7 +508,7 @@ flowchart LR
 | Typo 召回 | `typo_detect.py`, `config typo.*` | 自由文本列拼写 |
 | FD 精度 | `fd_detect.py`, `execution.fd.*` | 软相关 vs 真依赖 |
 | 条件层编码 | `encoding.py` `max_cardinality` | 身份保留、键->值冲突可检 |
-| DIST 阈值 | `score.py` `quantile`, `margin`, `min_predictability` | 合并 F1 关键杠杆 |
+| DIST 阈值 | `score.py` `abs_prob_floor`, `quantile`, `margin`, `min_predictability` | 召回/精度关键杠杆 |
 | LLM 精检成本 | `stage_3/cache.py`, `--limit` | 按行分组，一次 LLM 处理多格 |
 | 精检质量 | `prompt.py` 跨列原则 | Stateavg 等派生列误报 |
 

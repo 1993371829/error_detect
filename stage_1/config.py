@@ -19,6 +19,15 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from paths.layout import (
+    OutputLayout,
+    DatasetPaths,
+    default_dataset_paths,
+    ensure_output_dirs,
+    rel_path,
+    resolve_dataset_paths,
+)
+
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
@@ -101,15 +110,18 @@ class ExecutionConfig:
     fd: FDConfig = field(default_factory=FDConfig)
 
 
+_DEFAULT_DP = default_dataset_paths()
+
+
 @dataclass
 class PathsConfig:
-    """输入输出路径配置。"""
+    """输入输出路径配置（默认按 hospital 数据集布局；CLI 可按 --input 重算）。"""
 
-    rule_cache: str = ".rule_cache.json"  # LLM 规则缓存，避免重复调用
-    rules_output: str = "rules.json"      # 归纳后的规则报告
-    errors_output: str = "errors.csv"     # 检测到的错误单元格
-    profiles_output: str = "profiles.json"  # 列画像输出
-    clean_mask_output: str = "clean_mask.csv"  # 干净单元格掩码（供 Stage 2 训练）
+    rule_cache: str = rel_path(_DEFAULT_DP.rule_cache)
+    rules_output: str = rel_path(_DEFAULT_DP.rules)
+    errors_output: str = rel_path(_DEFAULT_DP.errors)
+    profiles_output: str = rel_path(_DEFAULT_DP.profiles)
+    clean_mask_output: str = rel_path(_DEFAULT_DP.clean_mask)
 
 
 @dataclass
@@ -119,6 +131,7 @@ class Stage1Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     profiling: ProfilingConfig = field(default_factory=ProfilingConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    layout: OutputLayout = field(default_factory=OutputLayout)
     paths: PathsConfig = field(default_factory=PathsConfig)
 
     @classmethod
@@ -164,6 +177,8 @@ class Stage1Config:
                 for key, val in paths.items():
                     if hasattr(cfg.paths, key):
                         setattr(cfg.paths, key, val)
+        if layout := data.get("layout"):
+            cfg.layout = OutputLayout.from_dict(layout)
         return cfg
 
     def apply_env_overrides(self) -> "Stage1Config":
@@ -188,7 +203,31 @@ class Stage1Config:
             self.paths.rule_cache = overrides["rule_cache"]
         if overrides.get("profiles_out") is not None:
             self.paths.profiles_output = overrides["profiles_out"]
+        if overrides.get("clean_mask_out") is not None:
+            self.paths.clean_mask_output = overrides["clean_mask_out"]
         return self
+
+    def set_paths_from_dataset(
+        self,
+        dirty_csv: str | Path,
+        *,
+        dataset: str | None = None,
+        cli_overrides: Optional[Dict[str, Any]] = None,
+    ) -> DatasetPaths:
+        """根据 --input 脏表路径解析并写入标准输出路径（CLI 显式指定的项不覆盖）。"""
+        dp = resolve_dataset_paths(dirty_csv, self.layout, dataset=dataset)
+        ov = cli_overrides or {}
+        if ov.get("output") is None:
+            self.paths.errors_output = rel_path(dp.errors)
+        if ov.get("rules_out") is None:
+            self.paths.rules_output = rel_path(dp.rules)
+        if ov.get("profiles_out") is None:
+            self.paths.profiles_output = rel_path(dp.profiles)
+        if ov.get("clean_mask_out") is None:
+            self.paths.clean_mask_output = rel_path(dp.clean_mask)
+        if ov.get("rule_cache") is None:
+            self.paths.rule_cache = rel_path(dp.rule_cache)
+        return dp
 
     @classmethod
     def resolve(

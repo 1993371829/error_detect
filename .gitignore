@@ -1,6 +1,6 @@
 .env
-.rule_cache.json
-.stage3_cache.json
+cache/
+output/
 __pycache__/
 *.pyc
 debug-*.log

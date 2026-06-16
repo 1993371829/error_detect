@@ -10,6 +10,11 @@ Stage 2 打分与输出：基于统一条件预测模型的逐格似然/残差�
     - 超高基数文本：score = 形态特征重构 MSE（兜底）。
     每列阈值取"干净单元格"上分数分布的高分位（quantile），无监督、按列自适应。
 
+召回杠杆（二者取并集，满足其一即召回）:
+    - 相对：scores > 干净子集分位阈值（降低 quantile 更宽松）。
+    - 绝对（仅类别列）：P(观测值) < abs_prob_floor，即 scores > -log(abs_prob_floor)，
+      不受分位数限制，直接抓"在上下文里本就极不可能"的低概率冲突取值。
+
 输出 schema:
     row_id, column, value, error_type(=DIST), anomaly_score, col_contribution,
     suggested_fix, subtype
@@ -108,10 +113,11 @@ def flag_suspicious_cells(
     quantile: float = 0.99,
     margin: float = 0.0,
     min_predictability: float = 0.5,
+    abs_prob_floor: float = 0.0,
     min_clean: int = 20,
     max_cells_per_row: int = 0,
 ) -> pd.DataFrame:
-    """对每列计算分数并按干净分位阈值 + 精度闸门筛出可疑单元格。"""
+    """对每列计算分数并按干净分位阈值 + 绝对概率地板（并集）+ 精度闸门筛出可疑单元格。"""
     n = len(df)
     records: list[dict] = []
     for spec in specs:
@@ -140,7 +146,13 @@ def flag_suspicious_cells(
 
         thr = float(np.quantile(scores[thr_mask], quantile))
 
-        flag = valid & (scores > thr) & info["pred_differs"]
+        # 相对分位 与 绝对概率地板 取并集；绝对地板仅类别列（有概率语义）。
+        base = scores > thr
+        if spec.target_kind == "categorical" and abs_prob_floor > 0:
+            abs_thr = -np.log(abs_prob_floor + _EPS)
+            base = base | (scores > abs_thr)
+
+        flag = valid & base & info["pred_differs"]
         if info["margin"] is not None:
             flag = flag & (info["margin"] >= margin)
 
@@ -181,6 +193,7 @@ def run_stage2(
     quantile: float = 0.99,
     margin: float = 0.0,
     min_predictability: float = 0.5,
+    abs_prob_floor: float = 0.0,
     max_cells_per_row: int = 0,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """
@@ -207,6 +220,7 @@ def run_stage2(
     candidates = flag_suspicious_cells(
         df, specs, x_all, preds, clean_mask,
         quantile=quantile, margin=margin,
-        min_predictability=min_predictability, max_cells_per_row=max_cells_per_row,
+        min_predictability=min_predictability, abs_prob_floor=abs_prob_floor,
+        max_cells_per_row=max_cells_per_row,
     )
     return candidates, {"model": candidates}

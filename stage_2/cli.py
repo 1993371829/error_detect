@@ -1,41 +1,25 @@
 """
 Stage 2 命令行入口：统一条件预测模型的分布/冲突异常检测。
 
-一个模型同时覆盖两类错误（无需按数据集路由）:
-    - 分布型异常（拼写/未知类别/越界）：行上下文给出低条件概率。
-    - 键->值冲突 / 真值发现（如某来源把航班时刻写错）：P(time|flight) 集中在共识取值，
-      偏离者得到低概率。
-
 前置条件:
     pip install -r requirements.txt
     pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
-    先完成 Stage 1，确保存在 clean_mask.csv 与 Stage 1 错误 CSV。
+    先完成 Stage 1（产出 output/mask/{dataset}_clean_mask.csv 等）
 
-运行命令（在项目根目录 d:\\study\\error_dect 下执行）:
+运行命令（PowerShell，项目根目录）:
 
-    # hospital 全流程 — Stage 2
-    python -m stage_2.cli
+    python -m stage_2.cli --input data/hospital_dirty.csv
+    python -m stage_2.cli --input data/flights_dirty.csv
 
-    # flights
-    python -m stage_2.cli --input data/flights_dirty.csv \
-        --clean-mask clean_mask.csv \
-        --stage1-errors data/flights_errors.csv \
-        --candidates-out data/flights_stage2_candidates.csv \
-        --combined-out data/flights_combined_candidates.csv
+    # 调阈值
+    python -m stage_2.cli --input data/hospital_dirty.csv --quantile 0.9 --abs-prob-floor 0.1
 
-    # 调阈值：偏召回（误报交 Stage 3 过滤） / 偏精度
-    python -m stage_2.cli --quantile 0.98
-    python -m stage_2.cli --quantile 0.995 --margin 0.1
-
-    # 调试：缩短训练轮数
-    python -m stage_2.cli --epochs 40
-
-产出:
-    data/stage2_candidates.csv     Stage 2 DIST 候选（含 suggested_fix）
-    data/combined_candidates.csv   Stage1 ∪ Stage2 合并（Stage 3 输入）
+产出（以 hospital 为例）:
+    output/stage2/hospital_stage2_candidates.csv
+    output/stage2/hospital_combined_candidates.csv
 
 下一步:
-    python -m stage_3.cli
+    python -m stage_3.cli --input data/hospital_dirty.csv
 """
 
 from __future__ import annotations
@@ -43,6 +27,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from paths.layout import ensure_output_dirs
 from stage_2.config import Stage2Config
 from stage_2.io_utils import merge_candidates, read_clean_mask, read_table
 from stage_2.model import build_model
@@ -51,7 +36,8 @@ from stage_2.score import run_stage2
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Stage 2: conditional-prediction anomaly detection")
-    parser.add_argument("--input", default=None, help="待检测脏表 CSV")
+    parser.add_argument("--input", default=None, help="待检测脏表 CSV（data/{dataset}_dirty.csv）")
+    parser.add_argument("--dataset", default=None, help="显式指定数据集名")
     parser.add_argument("--clean-mask", default=None, help="Stage 1 干净单元格掩码 CSV")
     parser.add_argument("--stage1-errors", default=None, help="Stage 1 错误结果 CSV")
     parser.add_argument("--candidates-out", default=None, help="Stage 2 DIST 候选输出")
@@ -61,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="类别精度闸门：备选类概率需超观测类至少该值才报")
     parser.add_argument("--min-predictability", type=float, default=None,
                         help="类别列在干净集上的最低 top-1 可预测性，低于则跳过该列")
+    parser.add_argument("--abs-prob-floor", type=float, default=None,
+                        help="类别列绝对概率地板：P(观测值)<该值即召回（与分位阈值取并集，0=关闭）")
     parser.add_argument("--max-cells-per-row", type=int, default=None,
                         help="每行最多保留 top-N 高分单元格（0=不限）")
     parser.add_argument("--max-cardinality", type=int, default=None,
@@ -69,24 +57,30 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _cli_overrides(args: argparse.Namespace) -> dict:
+    return {
+        "clean_mask": args.clean_mask,
+        "stage1_errors": args.stage1_errors,
+        "candidates_out": args.candidates_out,
+        "combined_out": args.combined_out,
+    }
+
+
 def _resolve_config(args: argparse.Namespace) -> Stage2Config:
     cfg = Stage2Config()
-    if args.input:
-        cfg.paths.input_csv = args.input
-    if args.clean_mask:
-        cfg.paths.clean_mask = args.clean_mask
-    if args.stage1_errors:
-        cfg.paths.stage1_errors = args.stage1_errors
-    if args.candidates_out:
-        cfg.paths.candidates_out = args.candidates_out
-    if args.combined_out:
-        cfg.paths.combined_out = args.combined_out
+    ov = _cli_overrides(args)
+    dirty = args.input or cfg.paths.input_csv
+    dp = cfg.set_paths_from_dataset(dirty, dataset=args.dataset, cli_overrides=ov)
+    ensure_output_dirs(dp)
+
     if args.quantile is not None:
         cfg.scoring.quantile = args.quantile
     if args.margin is not None:
         cfg.scoring.margin = args.margin
     if args.min_predictability is not None:
         cfg.scoring.min_predictability = args.min_predictability
+    if args.abs_prob_floor is not None:
+        cfg.scoring.abs_prob_floor = args.abs_prob_floor
     if args.max_cells_per_row is not None:
         cfg.scoring.max_cells_per_row = args.max_cells_per_row
     if args.max_cardinality is not None:
@@ -106,7 +100,7 @@ def main(argv: list[str] | None = None) -> None:
     mask_path = Path(cfg.paths.clean_mask)
     if not mask_path.exists():
         raise FileNotFoundError(
-            f"未找到干净掩码 {mask_path}，请先运行 Stage 1 生成 clean_mask.csv。"
+            f"未找到干净掩码 {mask_path}，请先运行 Stage 1 生成 output/mask/{{dataset}}_clean_mask.csv。"
         )
     clean_mask = read_clean_mask(mask_path)
     row_clean = int(clean_mask.all(axis=1).sum())
@@ -125,6 +119,7 @@ def main(argv: list[str] | None = None) -> None:
         quantile=cfg.scoring.quantile,
         margin=cfg.scoring.margin,
         min_predictability=cfg.scoring.min_predictability,
+        abs_prob_floor=cfg.scoring.abs_prob_floor,
         max_cells_per_row=cfg.scoring.max_cells_per_row,
     )
 
@@ -138,7 +133,6 @@ def main(argv: list[str] | None = None) -> None:
         print("列分布:")
         print(candidates["column"].value_counts().to_string())
 
-    # 与 Stage 1 合并
     s1_path = Path(cfg.paths.stage1_errors)
     if s1_path.exists():
         stage1 = read_table(s1_path)

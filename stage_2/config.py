@@ -9,19 +9,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from paths.layout import (
+    DatasetPaths,
+    OutputLayout,
+    default_dataset_paths,
+    rel_path,
+    resolve_dataset_paths,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_DP = default_dataset_paths()
 
 
 @dataclass
 class EncodingConfig:
     """表格编码参数（见 stage_2/encoding.py）。"""
 
-    max_cardinality: int = 500           # 类别列唯一值上限；<= 则 one-hot 身份保留，> 则 surrogate
-    numeric_min_ratio: float = 0.8       # 判定数值列的可解析比例（单位感知）
-    n_hash: int = 16                     # 高基数 surrogate 的字符 n-gram 哈希桶数（仅输入条件）
-    target_max_card: Optional[int] = None  # 类别"目标头"最大类数（None=同 max_cardinality）
+    max_cardinality: int = 500
+    numeric_min_ratio: float = 0.8
+    n_hash: int = 16
+    target_max_card: Optional[int] = None
 
 
 @dataclass
@@ -40,28 +49,30 @@ class ModelConfig:
 class ScoringConfig:
     """打分与阈值参数。"""
 
-    quantile: float = 0.99           # 干净单元格逐列分数高分位阈值
-    margin: float = 0.0              # 类别精度闸门：备选类概率需超观测类至少该值才报
-    min_predictability: float = 0.5  # 类别列在干净集上的最低 top-1 可预测性，低于则跳过该列
-    max_cells_per_row: int = 0       # 每行最多保留 top-N 高分单元格（0=不限）
+    quantile: float = 0.99
+    margin: float = 0.0
+    min_predictability: float = 0.5
+    abs_prob_floor: float = 0.02
+    max_cells_per_row: int = 0
 
 
 @dataclass
 class PathsConfig:
-    """输入输出路径（默认相对项目根）。"""
+    """输入输出路径（默认 hospital 数据集布局）。"""
 
-    input_csv: str = "data/hospital_dirty.csv"          # 待检测脏表
-    clean_csv: str = "data/hospital_clean.csv"          # 评估用 ground truth（可选）
-    clean_mask: str = "clean_mask.csv"                  # Stage 1 产出的干净单元格掩码
-    stage1_errors: str = "data/hospital_errors.csv"     # Stage 1 错误结果
-    candidates_out: str = "data/stage2_candidates.csv"  # Stage 2 DIST 候选
-    combined_out: str = "data/combined_candidates.csv"  # Stage1 ∪ Stage2 合并集
+    input_csv: str = rel_path(_DEFAULT_DP.dirty_csv)
+    clean_csv: str = rel_path(_DEFAULT_DP.clean_csv)
+    clean_mask: str = rel_path(_DEFAULT_DP.clean_mask)
+    stage1_errors: str = rel_path(_DEFAULT_DP.errors)
+    candidates_out: str = rel_path(_DEFAULT_DP.stage2_candidates)
+    combined_out: str = rel_path(_DEFAULT_DP.combined_candidates)
 
 
 @dataclass
 class Stage2Config:
     """Stage 2 顶层配置。"""
 
+    layout: OutputLayout = field(default_factory=OutputLayout)
     encoding: EncodingConfig = field(default_factory=EncodingConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
@@ -69,3 +80,26 @@ class Stage2Config:
 
     def model_kwargs(self) -> dict:
         return {k: v for k, v in vars(self.model).items()}
+
+    def set_paths_from_dataset(
+        self,
+        dirty_csv: str | Path,
+        *,
+        dataset: str | None = None,
+        cli_overrides: Optional[dict[str, Any]] = None,
+    ) -> DatasetPaths:
+        """根据 --input 解析 Stage 2 依赖的全部路径。"""
+        dp = resolve_dataset_paths(dirty_csv, self.layout, dataset=dataset)
+        ov = cli_overrides or {}
+        self.paths.input_csv = rel_path(dp.dirty_csv)
+        if ov.get("clean_mask") is None:
+            self.paths.clean_mask = rel_path(dp.clean_mask)
+        if ov.get("stage1_errors") is None:
+            self.paths.stage1_errors = rel_path(dp.errors)
+        if ov.get("candidates_out") is None:
+            self.paths.candidates_out = rel_path(dp.stage2_candidates)
+        if ov.get("combined_out") is None:
+            self.paths.combined_out = rel_path(dp.combined_candidates)
+        if ov.get("clean_csv") is None:
+            self.paths.clean_csv = rel_path(dp.clean_csv)
+        return dp

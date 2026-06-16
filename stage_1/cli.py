@@ -7,25 +7,25 @@ Stage 1 命令行入口：LLM 辅助规则层（MV / FI / T / VAD）。
 
 运行命令（在项目根目录 d:\\study\\error_dect 下执行）:
 
-    # hospital 全流程 — Stage 1（正式运行）
-    python main.py --input data/hospital_dirty.csv --output data/hospital_errors.csv --rules-out data/hospital_rules.json
+    # hospital 全流程 — Stage 1（路径由 --input 自动推导）
+    python main.py --input data/hospital_dirty.csv
 
-    # 等价入口
-    python -m stage_1.cli --input data/hospital_dirty.csv --output data/hospital_errors.csv --rules-out data/hospital_rules.json
+    # flights
+    python main.py --input data/flights_dirty.csv
 
     # 仅画像，不调 LLM（零成本验证数据）
     python main.py --input data/hospital_dirty.csv --dry-run
 
-    # 可选：调整规则违反率上限（默认 0.3）
-    python main.py --input data/hospital_dirty.csv --output data/hospital_errors.csv --rules-out data/hospital_rules.json --max-violation-rate 0.25
+    # 显式覆盖输出路径（可选）
+    python main.py --input data/hospital_dirty.csv --output custom/errors.csv --rules-out custom/rules.json
 
-产出:
-    data/hospital_errors.csv   规则层检出的错误单元格
-    data/hospital_rules.json   归纳规则（供 Stage 3 取 semantic_type）
-    clean_mask.csv             干净单元格掩码（Stage 2 训练必需）
+产出（以 hospital 为例）:
+    output/stage1/hospital_errors.csv
+    output/stage1/hospital_rules.json
+    output/mask/hospital_clean_mask.csv
 
 下一步:
-    python -m stage_2.cli
+    python -m stage_2.cli --input data/hospital_dirty.csv
 
 CSV 读取策略:
     dtype=str, keep_default_na=False, na_values=['']
@@ -40,6 +40,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from paths.layout import ensure_output_dirs
 from stage_1.config import DEFAULT_CONFIG_PATH, Stage1Config
 from stage_1.executor import build_clean_mask, run_rule_layer
 
@@ -49,15 +50,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Stage 1: LLM-assisted rule-based table error detection",
     )
-    parser.add_argument("--input", required=True, help="输入 CSV 路径")
+    parser.add_argument("--input", required=True, help="输入 CSV 路径（data/{dataset}_dirty.csv）")
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="配置文件路径 (default: configs/default.yaml)",
     )
+    parser.add_argument("--dataset", default=None, help="显式指定数据集名（默认从文件名推断）")
     parser.add_argument("--output", default=None, help="错误输出 CSV 路径")
     parser.add_argument("--rules-out", default=None, help="归纳规则输出 JSON 路径")
     parser.add_argument("--rule-cache", default=None, help="规则缓存文件路径")
+    parser.add_argument("--profiles-out", default=None, help="列画像输出 JSON 路径（dry-run）")
+    parser.add_argument("--clean-mask-out", default=None, help="干净掩码输出 CSV 路径")
     parser.add_argument("--dry-run", action="store_true", help="只做画像,不调 LLM")
     parser.add_argument(
         "--max-violation-rate",
@@ -77,12 +81,18 @@ def main(argv: list[str] | None = None) -> None:
         "output": args.output,
         "rules_out": args.rules_out,
         "rule_cache": args.rule_cache,
+        "profiles_out": args.profiles_out,
+        "clean_mask_out": args.clean_mask_out,
         "max_violation_rate": args.max_violation_rate,
     }
     config = Stage1Config.resolve(config_path=args.config, cli_overrides=cli_overrides)
+    dp = config.set_paths_from_dataset(
+        args.input, dataset=args.dataset, cli_overrides=cli_overrides
+    )
+    ensure_output_dirs(dp)
 
     df = pd.read_csv(args.input, dtype=str, keep_default_na=False, na_values=[""])
-    print(f"加载数据: {df.shape[0]} 行, {df.shape[1]} 列")
+    print(f"加载数据: {df.shape[0]} 行, {df.shape[1]} 列 (数据集: {dp.dataset})")
 
     errors, rule_report = run_rule_layer(df, config=config, dry_run=args.dry_run)
 

@@ -2,41 +2,20 @@
 Stage 3 命令行入口：LLM 语义精检（确认 / 分类 / 建议修复）。
 
 前置条件:
-    pip install -r requirements.txt
-    配置 LLM：.env 中填写 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
-    先完成 Stage 1 与 Stage 2，确保存在:
-        data/combined_candidates.csv
-        data/hospital_rules.json
-        data/hospital_dirty.csv
+    先完成 Stage 1 与 Stage 2（产出 output/stage2/{dataset}_combined_candidates.csv 等）
 
-运行命令（在项目根目录 d:\\study\\error_dect 下执行）:
+运行命令（PowerShell，项目根目录）:
 
-    # hospital 全流程 — Stage 3（建议先 dry-run 确认 prompt）
-    python -m stage_3.cli --dry-run --limit 3
+    python -m stage_3.cli --input data/hospital_dirty.csv --dry-run --limit 3
+    python -m stage_3.cli --input data/hospital_dirty.csv
+    python -m stage_3.cli --input data/hospital_dirty.csv --limit 20 --no-cache
 
-    # 正式全量精检
-    python -m stage_3.cli
+产出（以 hospital 为例）:
+    output/stage3/hospital_stage3_results.csv
+    output/stage3/hospital_final_errors.csv
 
-    # 小规模试跑（省钱）
-    python -m stage_3.cli --limit 20
-
-    # 显式指定输入/输出路径
-    python -m stage_3.cli --input data/hospital_dirty.csv --candidates data/combined_candidates.csv --rules data/hospital_rules.json --results-out data/stage3_results.csv --final-out data/final_errors.csv
-
-    # 禁用 LLM 响应缓存
-    python -m stage_3.cli --no-cache
-
-评估（需 data/hospital_clean.csv）:
-    python -m stage_3.evaluate
-
-产出:
-    data/stage3_results.csv  逐格判定明细（is_error / confidence / suggested_fix / llm_reason）
-    data/final_errors.csv    最终确认错误 (row_id, column, error_type, confidence, suggested_fix)
-
-全流程回顾:
-    python main.py --input data/hospital_dirty.csv --output data/hospital_errors.csv --rules-out data/hospital_rules.json
-    python -m stage_2.cli
-    python -m stage_3.cli
+评估:
+    python -m stage_3.evaluate --dirty data/hospital_dirty.csv
 """
 
 from __future__ import annotations
@@ -46,6 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from paths.layout import ensure_output_dirs
 from stage_3.cache import ResponseCache
 from stage_3.config import Stage3Config
 from stage_3.context import load_contexts
@@ -61,7 +41,8 @@ FINAL_COLUMNS = ["row_id", "column", "error_type", "confidence", "suggested_fix"
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Stage 3: LLM semantic verification")
-    p.add_argument("--input", default=None, help="原始脏表 CSV")
+    p.add_argument("--input", default=None, help="原始脏表 CSV（data/{dataset}_dirty.csv）")
+    p.add_argument("--dataset", default=None, help="显式指定数据集名")
     p.add_argument("--candidates", default=None, help="Stage1∪Stage2 候选 CSV")
     p.add_argument("--rules", default=None, help="Stage1 rules.json")
     p.add_argument("--results-out", default=None, help="逐格判定输出 CSV")
@@ -73,29 +54,28 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _apply_overrides(cfg: Stage3Config, args: argparse.Namespace) -> None:
-    if args.input:
-        cfg.paths.input_csv = args.input
-    if args.candidates:
-        cfg.paths.candidates = args.candidates
-    if args.rules:
-        cfg.paths.rules = args.rules
-    if args.results_out:
-        cfg.paths.results_out = args.results_out
-    if args.final_out:
-        cfg.paths.final_errors_out = args.final_out
-    if args.cache:
-        cfg.paths.cache = args.cache
-    if args.limit is not None:
-        cfg.limit = args.limit
-    if args.dry_run:
-        cfg.dry_run = True
+def _cli_overrides(args: argparse.Namespace) -> dict:
+    return {
+        "candidates": args.candidates,
+        "rules": args.rules,
+        "results_out": args.results_out,
+        "final_out": args.final_out,
+        "cache": args.cache,
+    }
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     cfg = Stage3Config.resolve()
-    _apply_overrides(cfg, args)
+    ov = _cli_overrides(args)
+    dirty = args.input or cfg.paths.input_csv
+    dp = cfg.set_paths_from_dataset(dirty, dataset=args.dataset, cli_overrides=ov)
+    ensure_output_dirs(dp)
+
+    if args.limit is not None:
+        cfg.limit = args.limit
+    if args.dry_run:
+        cfg.dry_run = True
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
@@ -104,7 +84,7 @@ def main(argv: list[str] | None = None) -> None:
     if cfg.limit and cfg.limit > 0:
         contexts = contexts[:cfg.limit]
     n_cells = sum(len(c.suspects) for c in contexts)
-    print(f"待精检: {len(contexts)} 行分组, {n_cells} 个可疑单元格")
+    print(f"待精检: {len(contexts)} 行分组, {n_cells} 个可疑单元格 (数据集: {dp.dataset})")
 
     if cfg.dry_run:
         preview = min(3, len(contexts))

@@ -3,7 +3,7 @@ Stage 3 评估：以 clean vs dirty 的逐单元格差异为 ground truth，
 对比"精检前(合并候选)"与"精检后(最终确认)"的 P/R/F1，并突出 Stateavg 误报的化解效果。
 
 用法:
-    python -m stage_3.evaluate
+    python -m stage_3.evaluate --dirty data/hospital_dirty.csv
 """
 
 from __future__ import annotations
@@ -30,27 +30,36 @@ def _report(name: str, cells: set, gt: set) -> dict:
 
 
 def main(argv: list[str] | None = None) -> None:
-    cfg = Stage3Config()
+    cfg = Stage3Config.resolve()
     parser = argparse.ArgumentParser(description="Stage 3 evaluation")
-    parser.add_argument("--clean", default=cfg.paths.clean_csv)
-    parser.add_argument("--dirty", default=cfg.paths.input_csv)
-    parser.add_argument("--candidates", default=cfg.paths.candidates)
-    parser.add_argument("--final", default=cfg.paths.final_errors_out)
+    parser.add_argument("--dirty", default=None, help="脏表 CSV（指定后自动推导其余路径）")
+    parser.add_argument("--dataset", default=None, help="显式指定数据集名")
+    parser.add_argument("--clean", default=None, help="评估用 clean CSV")
+    parser.add_argument("--candidates", default=None, help="合并候选 CSV")
+    parser.add_argument("--final", default=None, help="最终确认错误 CSV")
     args = parser.parse_args(argv)
 
-    clean = read_table(args.clean)
-    dirty = read_table(args.dirty)
+    if args.dirty:
+        cfg.set_paths_from_dataset(args.dirty, dataset=args.dataset)
+
+    clean_path = args.clean or cfg.paths.clean_csv
+    dirty_path = args.dirty or cfg.paths.input_csv
+    candidates_path = args.candidates or cfg.paths.candidates
+    final_path = args.final or cfg.paths.final_errors_out
+
+    clean = read_table(clean_path)
+    dirty = read_table(dirty_path)
     gt = ground_truth_cells(clean, dirty)
     print(f"Ground-truth 注入错误单元格: {len(gt)}\n")
 
     before = None
-    if Path(args.candidates).exists():
-        cand = read_table(args.candidates)
+    if Path(candidates_path).exists():
+        cand = read_table(candidates_path)
         before = _report("精检前(合并候选)", cells_from(cand), gt)
 
     after = None
-    if Path(args.final).exists():
-        final = read_table(args.final)
+    if Path(final_path).exists():
+        final = read_table(final_path)
         after = _report("精检后(最终确认)", cells_from(final), gt)
 
     if before and after:
@@ -60,9 +69,9 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  F1        {before['f1']:.3f} -> {after['f1']:.3f}")
 
     # Stateavg 误报专项
-    if Path(args.candidates).exists() and Path(args.final).exists():
-        cand = read_table(args.candidates)
-        final = read_table(args.final)
+    if Path(candidates_path).exists() and Path(final_path).exists():
+        cand = read_table(candidates_path)
+        final = read_table(final_path)
         cand_sa = {c for c in cells_from(cand) if c[1] == "Stateavg"} - gt
         final_sa = {c for c in cells_from(final) if c[1] == "Stateavg"} - gt
         print(f"\nStateavg 误报: 精检前 {len(cand_sa)} -> 精检后 {len(final_sa)} "

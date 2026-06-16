@@ -47,10 +47,16 @@ execution:
     max_determinant_unique_ratio: 0.5  # 决定列唯一率上限（过高跳过）
     min_dependent_unique: 2        # 依赖列最少唯一值
 
-# 输入输出路径
+# 目录布局：data/ 仅原始数据；生成物写入 output/ 子目录
+layout:
+  data_dir: data
+  output_root: output
+  mask_dir: output/mask
+  stage1_dir: output/stage1
+  stage2_dir: output/stage2
+  stage3_dir: output/stage3
+  cache_dir: cache
+
+# 输入输出路径（默认由 --input 自动推导；此处仅覆盖缓存等全局项）
 paths:
-  rule_cache: ".rule_cache.json"   # LLM 规则缓存
-  rules_output: "rules.json"       # 归纳后的规则报告
-  errors_output: "errors.csv"      # 检测到的错误单元格
-  profiles_output: "profiles.json" # 列画像输出
-  clean_mask_output: "clean_mask.csv"  # 干净单元格掩码（供 Stage 2 训练）
+  rule_cache: cache/rule_cache.json
