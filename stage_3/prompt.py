@@ -26,8 +26,16 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
    （例如某"州平均"编码的前缀与本行 State 一致，或某派生列由多列共同决定且取值合理），
    应判为 NONE（误报），不要盲从前序标记。
 2. 正常样例代表该列常见的合法形态，可用于识别 typo / 格式问题。
-3. 对确实是错误的，尽量给出最可能的正确值 suggested_fix；无法确定时置为 null。
-4. confidence 取 0~1，表示"这是错误"的把握；判 NONE 时表示"这是误报"的把握。
+3. 若提供 cross_row_consensus（按某 key 列分组后，同 key 其他行对该列的取值分布）:
+   - 当本格取值与同 key 多数值不一致（conflicts_with_majority=true）且多数值占比较高时，
+     即便本值"看起来格式合法"，通常也是与其他记录冲突的错误（应判为错误，类型 VAD/OTHER，
+     suggested_fix 取 majority_value）。这类错误无法只看单行判定，务必依据共识证据，
+     不要因"格式正常"就轻易判 NONE。
+   - 当本格取值与同 key 多数值一致时，倾向判 NONE。
+   - model_anomaly_score 越高，表示分布模型越认为本值可疑，可作为参考。
+4. 对确实是错误的，尽量给出最可能的正确值 suggested_fix；无法确定时置为 null。
+5. confidence 取 0~1，表示"这是错误"的把握；判 NONE 时表示"这是误报"的把握。
+   当依据充分（如明显冲突或明显 typo）请给出较高 confidence。
 """
 
 OUTPUT_SPEC = """## 输出（只输出 JSON，不要任何解释）
@@ -50,7 +58,7 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
     """把可疑单元格整理成精简 JSON 结构。"""
     items = []
     for s in ctx.suspects:
-        items.append({
+        item = {
             "column": s.column,
             "current_value": s.value,
             "semantic_type": s.semantic_type,
@@ -59,7 +67,21 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
             "prior_reason": s.reason,
             "prior_suggested_fix": s.suggested_fix or None,
             "normal_samples": list(s.normal_samples),
-        })
+        }
+        if s.anomaly_score is not None:
+            item["model_anomaly_score"] = round(float(s.anomaly_score), 3)
+        if s.consensus:
+            c = s.consensus
+            item["cross_row_consensus"] = {
+                "grouped_by": c["key_column"],
+                "key_value": c["key_value"],
+                "group_size": c["group_size"],
+                "majority_value": c["majority_value"],
+                "majority_share": c["majority_share"],
+                "current_value_share": c["current_share"],
+                "conflicts_with_majority": c["is_conflict"],
+            }
+        items.append(item)
     return items
 
 

@@ -51,6 +51,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=None, help="仅处理前 N 行分组（0=全部）")
     p.add_argument("--dry-run", action="store_true", help="只构造/打印 prompt，不调 LLM")
     p.add_argument("--no-cache", action="store_true", help="禁用响应缓存")
+    p.add_argument("--reject-conf-threshold", type=float, default=None,
+                   help="共识冲突候选被 LLM 否决所需的最低把握（默认 0.85）")
+    p.add_argument("--min-avg-group", type=float, default=None,
+                   help="探测 key 列的平均每取值行数门槛（默认 3.0）")
+    p.add_argument("--min-dominance", type=float, default=None,
+                   help="判定共识型列的组内主导占比门槛（默认 0.5）")
+    p.add_argument("--min-lift", type=float, default=None,
+                   help="组内占比相对全局基准的最小提升，排除类别不平衡伪共识（默认 0.15）")
     return p
 
 
@@ -76,15 +84,32 @@ def main(argv: list[str] | None = None) -> None:
         cfg.limit = args.limit
     if args.dry_run:
         cfg.dry_run = True
+    if args.reject_conf_threshold is not None:
+        cfg.reject_conf_threshold = args.reject_conf_threshold
+    if args.min_avg_group is not None:
+        cfg.min_avg_group = args.min_avg_group
+    if args.min_dominance is not None:
+        cfg.min_dominance = args.min_dominance
+    if args.min_lift is not None:
+        cfg.min_lift = args.min_lift
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
         max_normal_samples=cfg.max_normal_samples,
+        min_avg_group=cfg.min_avg_group,
+        min_dominance=cfg.min_dominance,
+        min_lift=cfg.min_lift,
     )
     if cfg.limit and cfg.limit > 0:
         contexts = contexts[:cfg.limit]
     n_cells = sum(len(c.suspects) for c in contexts)
+    n_conflict = sum(
+        1 for c in contexts for s in c.suspects if s.consensus_conflict
+    )
     print(f"待精检: {len(contexts)} 行分组, {n_cells} 个可疑单元格 (数据集: {dp.dataset})")
+    if n_conflict:
+        print(f"  其中 {n_conflict} 个为跨行共识冲突格（受缺证据保护，"
+              f"否决阈值={cfg.reject_conf_threshold}）")
 
     if cfg.dry_run:
         preview = min(3, len(contexts))
@@ -99,7 +124,10 @@ def main(argv: list[str] | None = None) -> None:
     llm = LLMClient(cfg.llm)
     cache = None if args.no_cache else ResponseCache(cfg.paths.cache)
 
-    results = verify_contexts(contexts, llm, cache=cache)
+    results = verify_contexts(
+        contexts, llm, cache=cache,
+        reject_conf_threshold=cfg.reject_conf_threshold,
+    )
     results_df = pd.DataFrame(results).reindex(columns=RESULT_COLUMNS)
 
     out = Path(cfg.paths.results_out)
@@ -115,6 +143,9 @@ def main(argv: list[str] | None = None) -> None:
 
     rejected = len(results_df) - len(confirmed)
     print(f"被 LLM 否决（误报）: {rejected} 个")
+    protected = int(results_df["llm_reason"].astype(str).str.startswith("[保护]").sum())
+    if protected:
+        print(f"缺证据保护：{protected} 个低把握否决被驳回，维持为错误（保住召回）")
     if len(confirmed):
         print("\n确认错误类型分布:")
         print(confirmed["error_type"].value_counts().to_string())

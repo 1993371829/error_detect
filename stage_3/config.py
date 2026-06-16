@@ -43,6 +43,11 @@ class Stage3Config:
     max_normal_samples: int = 8
     limit: int = 0
     dry_run: bool = False
+    # 跨行共识证据 / 缺证据保护参数
+    min_avg_group: float = 3.0          # 探测 key 列的"平均每取值行数"门槛
+    min_dominance: float = 0.5          # 某列被视为"共识型列"的组内主导占比门槛
+    min_lift: float = 0.15              # 组内占比相对全局基准占比的最小提升（排除类别不平衡伪共识）
+    reject_conf_threshold: float = 0.85  # 共识冲突候选被 LLM 否决所需的最低把握
     layout: OutputLayout = field(default_factory=OutputLayout)
     paths: PathsConfig = field(default_factory=PathsConfig)
     llm: Stage1Config = field(default=None)

@@ -14,6 +14,8 @@ from stage_3.prompt import build_prompt
 VALID_TYPES = {"MV", "T", "VAD", "FI", "OTHER", "NONE"}
 # 前序类型 -> 解析失败时的兜底最终类型
 _FALLBACK_TYPE = {"DIST": "OTHER", "": "OTHER"}
+# 缺证据保护：默认否决置信度门槛（低于此值且证据冲突时不允许否决）
+DEFAULT_REJECT_CONF_THRESHOLD = 0.85
 
 
 def _parse_response(raw: str) -> dict:
@@ -50,8 +52,16 @@ def _fallback_judgment(s: SuspectCell) -> dict:
     }
 
 
-def _normalize(judg: dict, s: SuspectCell) -> dict:
-    """规整单格判定字段，容错缺省值。"""
+def _is_stage2(s: SuspectCell) -> bool:
+    return "stage2" in (s.prior_source or "").lower()
+
+
+def _normalize(
+    judg: dict,
+    s: SuspectCell,
+    reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
+) -> dict:
+    """规整单格判定字段，容错缺省值；对跨行共识冲突的候选施加缺证据保护。"""
     etype = str(judg.get("error_type", "") or "").upper()
     is_error = judg.get("is_error")
     if is_error is None:
@@ -67,6 +77,27 @@ def _normalize(judg: dict, s: SuspectCell) -> dict:
     conf = max(0.0, min(1.0, conf))
     fix = judg.get("suggested_fix")
     fix = None if fix in (None, "", "null") else str(fix)
+    llm_reason = str(judg.get("reason", "") or "")
+
+    # 缺证据保护：来自分布模型(stage2)、且跨行共识证据表明本值与同 key 多数值冲突时，
+    # 只有当 LLM 以足够高的把握判其为误报，才允许否决；否则维持为错误（保住召回）。
+    if (
+        not is_error
+        and _is_stage2(s)
+        and s.consensus_conflict
+        and conf < reject_conf_threshold
+    ):
+        is_error = True
+        etype = "VAD" if s.column != s.consensus.get("key_column") else "OTHER"
+        if fix is None:
+            fix = s.consensus.get("majority_value") or (s.suggested_fix or None)
+        llm_reason = (
+            f"[保护] LLM 以低把握({conf:.2f}<{reject_conf_threshold})判 NONE，"
+            f"但同 {s.consensus.get('key_column')} 多数值="
+            f"{s.consensus.get('majority_value')!r}(占比 {s.consensus.get('majority_share')})"
+            f"与本值冲突，维持为错误。原因: {llm_reason}"
+        )
+
     return {
         "row_id": None,  # 由调用方填
         "column": s.column,
@@ -77,11 +108,16 @@ def _normalize(judg: dict, s: SuspectCell) -> dict:
         "error_type": etype,
         "confidence": round(conf, 3),
         "suggested_fix": fix,
-        "llm_reason": str(judg.get("reason", "") or ""),
+        "llm_reason": llm_reason,
     }
 
 
-def verify_row(ctx: RowContext, llm, cache: Optional[ResponseCache]) -> list[dict]:
+def verify_row(
+    ctx: RowContext,
+    llm,
+    cache: Optional[ResponseCache],
+    reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
+) -> list[dict]:
     """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。"""
     prompt = build_prompt(ctx)
     raw = cache.get(prompt) if cache else None
@@ -94,7 +130,10 @@ def verify_row(ctx: RowContext, llm, cache: Optional[ResponseCache]) -> list[dic
     results = []
     for s in ctx.suspects:
         judg = by_col.get(s.column)
-        norm = _normalize(judg, s) if judg else _fallback_judgment(s)
+        norm = (
+            _normalize(judg, s, reject_conf_threshold) if judg
+            else _fallback_judgment(s)
+        )
         norm["row_id"] = ctx.row_id
         results.append(norm)
     return results
@@ -105,12 +144,13 @@ def verify_contexts(
     llm,
     cache: Optional[ResponseCache] = None,
     progress_every: int = 50,
+    reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
 ) -> list[dict]:
     """遍历所有行上下文，返回扁平的逐格判定列表。"""
     all_results: list[dict] = []
     total = len(contexts)
     for i, ctx in enumerate(contexts, 1):
-        all_results.extend(verify_row(ctx, llm, cache))
+        all_results.extend(verify_row(ctx, llm, cache, reject_conf_threshold))
         if progress_every and (i % progress_every == 0 or i == total):
             print(f"  [stage3] 已处理 {i}/{total} 行")
     return all_results
