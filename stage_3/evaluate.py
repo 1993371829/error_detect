@@ -1,14 +1,16 @@
 """
 Stage 3 评估：以 clean vs dirty 的逐单元格差异为 ground truth，
-对比"精检前(合并候选)"与"精检后(最终确认)"的 P/R/F1，并突出 Stateavg 误报的化解效果。
+对比"精检前(合并候选)"与"精检后(最终确认)"的 P/R/F1，
+并按列统计 Stage 3 化解的误报 Top-N（适用于任意数据集，无写死列名）。
 
 用法:
-    python -m stage_3.evaluate --dirty data/hospital_dirty.csv
+    python -m stage_3.evaluate --dirty data/<dataset>_dirty.csv
 """
 
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -68,14 +70,18 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  Recall    {before['recall']:.3f} -> {after['recall']:.3f}")
         print(f"  F1        {before['f1']:.3f} -> {after['f1']:.3f}")
 
-    # Stateavg 误报专项
-    if Path(candidates_path).exists() and Path(final_path).exists():
-        cand = read_table(candidates_path)
-        final = read_table(final_path)
-        cand_sa = {c for c in cells_from(cand) if c[1] == "Stateavg"} - gt
-        final_sa = {c for c in cells_from(final) if c[1] == "Stateavg"} - gt
-        print(f"\nStateavg 误报: 精检前 {len(cand_sa)} -> 精检后 {len(final_sa)} "
-              f"(化解 {len(cand_sa) - len(final_sa)})")
+    # 通用：Stage 3 在各列上化解的误报（精检前 FP -> 精检后 FP），按化解数量取 Top-N
+    if before is not None and after is not None:
+        cand_fp = cells_from(cand) - gt        # 精检前误报单元格
+        final_fp = cells_from(final) - gt      # 精检后仍存在的误报
+        pre = Counter(c[1] for c in cand_fp)
+        post = Counter(c[1] for c in final_fp)
+        resolved = {col: pre[col] - post.get(col, 0) for col in pre}
+        top = sorted(resolved.items(), key=lambda kv: kv[1], reverse=True)[:6]
+        if top:
+            print("\n按列误报化解 Top（精检前FP -> 精检后FP, 化解）:")
+            for col, gain in top:
+                print(f"  {col:18s} {pre[col]:4d} -> {post.get(col, 0):4d}  (化解 {gain})")
 
 
 if __name__ == "__main__":
