@@ -11,7 +11,7 @@ from stage_3.cache import ResponseCache
 from stage_3.context import RowContext, SuspectCell
 from stage_3.prompt import build_prompt
 
-VALID_TYPES = {"MV", "T", "VAD", "FI", "OTHER", "NONE"}
+VALID_TYPES = {"MV", "DMV", "T", "VAD", "FI", "OTHER", "NONE"}
 # 前序类型 -> 解析失败时的兜底最终类型
 _FALLBACK_TYPE = {"DIST": "OTHER", "": "OTHER"}
 # 缺证据保护：默认否决置信度门槛（低于此值且证据冲突时不允许否决）
@@ -154,3 +154,44 @@ def verify_contexts(
         if progress_every and (i % progress_every == 0 or i == total):
             print(f"  [stage3] 已处理 {i}/{total} 行")
     return all_results
+
+
+def propagate_fix_mappings(results: list[dict]) -> list[dict]:
+    """
+    借鉴 Cocoon 的 old->new 映射复用：把同一列同一脏值的修复建议在确认错误的单元格间复用，
+    保证一致性并补全缺失的 suggested_fix。
+
+    构建 (column, value) -> 最高置信度的 suggested_fix（仅取 is_error 且 fix 非空者），
+    再回填那些被确认为错误但 suggested_fix 为空的同 (column, value) 单元格。
+    不改变 is_error / error_type，只补全/统一修复值。
+    """
+    best_fix: dict[tuple, tuple[str, float]] = {}
+    for r in results:
+        if not r.get("is_error"):
+            continue
+        fix = r.get("suggested_fix")
+        if fix in (None, "", "null"):
+            continue
+        key = (str(r.get("column")), str(r.get("value")))
+        conf = float(r.get("confidence", 0.0) or 0.0)
+        prev = best_fix.get(key)
+        if prev is None or conf > prev[1]:
+            best_fix[key] = (str(fix), conf)
+
+    if not best_fix:
+        return results
+
+    filled = 0
+    for r in results:
+        if not r.get("is_error"):
+            continue
+        if r.get("suggested_fix") not in (None, "", "null"):
+            continue
+        key = (str(r.get("column")), str(r.get("value")))
+        mapped = best_fix.get(key)
+        if mapped is not None:
+            r["suggested_fix"] = mapped[0]
+            filled += 1
+    if filled:
+        print(f"修复映射复用：为 {filled} 个同列同值单元格补全 suggested_fix")
+    return results

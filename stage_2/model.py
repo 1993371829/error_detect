@@ -92,7 +92,7 @@ class ConditionalPredictor:
     def __init__(
         self,
         hidden_dim: int = 256,
-        epochs: int = 120,
+        epochs: int = 200,
         lr: float = 1e-3,
         batch_size: int = 256,
         weight_decay: float = 1e-5,

@@ -15,9 +15,10 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
 
 错误类型定义:
 - MV : 缺失值（空/缺失哨兵）
+- DMV: 伪缺失值（非空但语义为缺失/未知/不适用，如 "?"、"unknown"、"missing"、占位数字 "9999"）
 - T  : 拼写错误（typo，与正确值仅少量字符差异）
 - VAD: 违反跨列依赖（该值与同行其他列不一致，如 city/state/zip 不匹配）
-- FI : 格式错误（格式/长度/取值范围不符合该列规范）
+- FI : 格式错误（格式/长度/取值范围/逻辑类型不符合该列规范，如本应是 bool/数值/日期却不符）
 - OTHER: 其他错误
 - NONE: 不是错误（前序为误报）
 
@@ -26,6 +27,16 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
    （例如某"州平均"编码的前缀与本行 State 一致，或某派生列由多列共同决定且取值合理），
    应判为 NONE（误报），不要盲从前序标记。
 2. 正常样例代表该列常见的合法形态，可用于识别 typo / 格式问题。
+   若提供 column_stats（该列统计画像），请据此基于"分布"而非单值判断:
+   - value_frequencies 给出高频合法值及出现次数；偏离主流且低频的值更可能是 string outlier / typo。
+   - dominant_patterns 是该列主导字符形态（d=数字, L=大写, l=小写）；与主导模式不符的值更可能是格式错误(FI)。
+   - numeric_range 给出数值列的 min/max/mean；明显超出范围的值更可能是数值离群(FI/OTHER)。
+   - null_rate 高时，"?/unknown/missing/占位数字"等更可能是伪缺失值(DMV)。
+   - 不一致表示（重要）：当 value_frequencies 显示同一概念存在多种写法
+     （单位/大小写/缩写/符号后缀不一致，如 "12.0 oz." / "12.0 ounce" / "12.0 OZ." 实为同义，
+     或 "0.09%" 多了百分号），即便该非规范写法是高频/多数派，也应判为格式错误(FI)，
+     suggested_fix 取该列语义最规范、最统一的写法（如 "12.0 oz"、"0.09"）。
+     不要因为"该写法很常见"就判 NONE——这正是需要被标准化纠正的系统性错误。
 3. 若提供 cross_row_consensus（按某 key 列分组后，同 key 其他行对该列的取值分布）:
    - 当本格取值与同 key 多数值不一致（conflicts_with_majority=true）且多数值占比较高时，
      即便本值"看起来格式合法"，通常也是与其他记录冲突的错误（应判为错误，类型 VAD/OTHER，
@@ -33,7 +44,12 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
      不要因"格式正常"就轻易判 NONE。
    - 当本格取值与同 key 多数值一致时，倾向判 NONE。
    - model_anomaly_score 越高，表示分布模型越认为本值可疑，可作为参考。
-4. 对确实是错误的，尽量给出最可能的正确值 suggested_fix；无法确定时置为 null。
+4. 对确实是错误的，请给出标准化的正确值 suggested_fix（old->new 映射思路）:
+   - 优先映射到该列 value_frequencies / normal_samples 中已存在的规范表示
+     （如 "English"->"eng"、"NY"->"New York" 取该列的主流写法）。
+   - 同一脏值在该列应映射到同一规范值，保持一致。
+   - DMV / MV 这类缺失，若无法恢复真实值，suggested_fix 置为 null。
+   - 无法确定正确值时置为 null。
 5. confidence 取 0~1，表示"这是错误"的把握；判 NONE 时表示"这是误报"的把握。
    当依据充分（如明显冲突或明显 typo）请给出较高 confidence。
 """
@@ -45,9 +61,9 @@ OUTPUT_SPEC = """## 输出（只输出 JSON，不要任何解释）
     {
       "column": "列名",
       "is_error": true,
-      "error_type": "MV|T|VAD|FI|OTHER|NONE",
+      "error_type": "MV|DMV|T|VAD|FI|OTHER|NONE",
       "confidence": 0.0,
-      "suggested_fix": "最可能正确值，或 null",
+      "suggested_fix": "标准化后的正确值，或 null",
       "reason": "简短理由"
     }
   ]
@@ -70,6 +86,17 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
         }
         if s.anomaly_score is not None:
             item["model_anomaly_score"] = round(float(s.anomaly_score), 3)
+        if s.column_stats:
+            cs = s.column_stats
+            stats = {
+                "null_rate": cs.get("null_rate"),
+                "distinct_count": cs.get("distinct_count"),
+                "value_frequencies": cs.get("top_values"),  # [[值, 出现次数], ...]
+                "dominant_patterns": cs.get("dominant_patterns"),
+            }
+            if cs.get("numeric_range"):
+                stats["numeric_range"] = cs["numeric_range"]
+            item["column_stats"] = stats
         if s.consensus:
             c = s.consensus
             item["cross_row_consensus"] = {

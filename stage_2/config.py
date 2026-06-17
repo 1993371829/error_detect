@@ -38,7 +38,7 @@ class ModelConfig:
     """统一条件预测模型超参（见 stage_2/model.py）。"""
 
     hidden_dim: int = 256
-    epochs: int = 120
+    epochs: int = 200
     lr: float = 1e-3
     batch_size: int = 256
     weight_decay: float = 1e-5

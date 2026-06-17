@@ -20,6 +20,7 @@ Step 2: LLM 规则归纳。
 from __future__ import annotations
 
 import json
+from typing import Optional
 
 from stage_1.config import Stage1Config
 
@@ -52,6 +53,18 @@ RULE_EXTRACTION_PROMPT = """你是数据质量专家。根据一张表格某一�
 - 格式/长度/数值范围违反 -> FI
 - 不在取值集合合法 -> FI
 
+## 列逻辑类型 logical_type（借鉴语义类型校验）
+除规则外，请额外推断该列在语义上应有的"逻辑类型" logical_type, 取值之一:
+- bool:   只应取真假两态（如 yes/no、true/false、0/1、Y/N）
+- int:    只应是整数
+- float:  只应是数值（含小数）
+- date:   只应是日期
+- categorical: 有限枚举类别（非数值）
+- string: 自由文本/标识符，不做类型约束
+规则: 仅当你**很有把握**该列应是 bool/int/float/date 时才给出对应类型；
+任何不确定、混合或自由文本一律用 string 或 categorical（这两者不会触发类型校验）。
+保守为先：宁可填 string 也不要误判类型导致大量误报。
+
 缺失值说明:
 - 系统会自动将空串、NaN、empty 等缺失哨兵识别为 MV，无需在 regex 中写 |empty
 - 若列不应为空，请输出 not_null 规则作语义记录；格式规则(regex/length 等)只描述非空值的合法形态
@@ -74,6 +87,7 @@ RULE_EXTRACTION_PROMPT = """你是数据质量专家。根据一张表格某一�
 {{
   "column": "列名",
   "semantic_type": "推断的语义类型(如 zip_code/state_code/date/email/name/free_text)",
+  "logical_type": "bool/int/float/date/categorical/string 之一",
   "confidence": 0.0,
   "rules": [
     {{
@@ -104,30 +118,97 @@ class LLMClient:
         )
         self.model = config.llm.model
         self.temperature = config.llm.temperature
+        self.max_tokens = config.llm.max_tokens
+        self.max_retries = config.llm.max_retries
 
     def complete(self, prompt: str) -> str:
         """发送 prompt 并返回模型回复文本（强制 JSON 格式）。"""
-        resp = self.client.chat.completions.create(
+        kwargs = dict(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=self.temperature,
             response_format={"type": "json_object"},
         )
+        if self.max_tokens and self.max_tokens > 0:
+            kwargs["max_tokens"] = self.max_tokens  # 截断保护
+        resp = self.client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content
+
+
+def _extract_json(raw: Optional[str]) -> Optional[dict]:
+    """
+    宽松解析 LLM 输出为 dict：
+        1. 直接 json.loads；
+        2. 去掉 ```json / ``` markdown 围栏后再试；
+        3. 回退取首个 '{' 到末个 '}' 的子串再试。
+
+    全部失败返回 None（不抛异常）。
+    """
+    if not raw:
+        return None
+    candidates = []
+    text = raw.strip()
+    candidates.append(text)
+
+    # 去掉 markdown 代码围栏（```json ... ``` 或 ``` ... ```）
+    if text.startswith("```"):
+        body = text[3:]
+        if body[:4].lower() == "json":
+            body = body[4:]
+        body = body.strip()
+        if body.endswith("```"):
+            body = body[:-3].strip()
+        candidates.append(body)
+
+    # 取首个 '{' 到末个 '}' 的子串（救前后多余文本 / 轻度截断）
+    lo, hi = text.find("{"), text.rfind("}")
+    if lo != -1 and hi != -1 and hi > lo:
+        candidates.append(text[lo:hi + 1])
+
+    for cand in candidates:
+        try:
+            data = json.loads(cand)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return None
+
+
+def complete_json(llm: "LLMClient", prompt: str, *, label: str = "") -> Optional[dict]:
+    """
+    通用的健壮 JSON 补全：截断保护(complete 的 max_tokens) + 宽松解析(_extract_json)
+    + 失败重试(llm.max_retries)。供规则归纳/标准化/FD 语义校验等所有 Stage 1 LLM 调用复用。
+
+    Returns:
+        解析成功的 dict；全部尝试失败返回 None（不抛异常、不中断流水线）。
+    """
+    attempts = 1 + max(0, getattr(llm, "max_retries", 0))
+    tag = f"({label}) " if label else ""
+    for _ in range(attempts):
+        try:
+            raw = llm.complete(prompt)
+        except Exception as exc:  # noqa: BLE001 - 接口/网络异常计入重试，不中断流水线
+            print(f"[llm-warn] {tag}LLM 调用异常，重试: {exc}")
+            continue
+        data = _extract_json(raw)
+        if data is not None:
+            return data
+    return None
 
 
 def extract_rules_for_column(llm: LLMClient, profile: dict) -> dict:
     """
     对单列画像调用 LLM，解析返回的 JSON 规则。
 
-    若 JSON 解析失败，返回空 rules 列表并打印警告，不中断流水线。
+    经 complete_json 做截断保护 + 宽松解析 + 重试；全部失败时返回空 rules 列表并打印
+    警告，不中断流水线。
     """
     prompt = RULE_EXTRACTION_PROMPT.format(
         profile=json.dumps(profile, ensure_ascii=False, indent=2)
     )
-    raw = llm.complete(prompt)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        print(f"[warn] 列 {profile['name']} 的 LLM 输出无法解析为 JSON,跳过")
-        return {"column": profile["name"], "rules": []}
+    data = complete_json(llm, prompt, label=f"列 {profile['name']}")
+    if data is not None:
+        return data
+    print(f"[warn] 列 {profile['name']} 的 LLM 输出无法解析为 JSON,跳过")
+    return {"column": profile["name"], "rules": []}

@@ -47,6 +47,8 @@ class LLMConfig:
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-4o-mini"
     temperature: float = 0.0  # 规则归纳需要稳定输出，固定为 0
+    max_tokens: int = 4096    # 输出上限，防高基数自由文本列 JSON 被截断（0=不显式传）
+    max_retries: int = 1      # JSON 解析/接口调用失败时的额外重试次数
 
 
 @dataclass
@@ -83,6 +85,26 @@ class TypoConfig:
 
 
 @dataclass
+class DMVConfig:
+    """伪缺失值（Disguised Missing Value）检测参数（借鉴 Cocoon）。"""
+
+    enabled: bool = True
+    extra_tokens: list[str] = field(default_factory=list)  # 默认词表外追加的伪缺失 token
+    detect_numeric_placeholder: bool = False  # 是否检测占位数字（默认关闭，控误报）
+    numeric_placeholders: list[str] = field(default_factory=list)  # 自定义占位数字
+
+
+@dataclass
+class StandardizeConfig:
+    """不一致表示 / 标准化检测参数（借鉴 Cocoon String Outliers，捕获多数派格式/单位不一致）。"""
+
+    enabled: bool = True
+    sample_n: int = 50               # 发给 LLM 的每列 top-N 高频 distinct 值
+    max_distinct_ratio: float = 0.6  # distinct/非空 超过此值的列视为自由文本/标识列，跳过
+    max_flag_rate: float = 0.95      # 命中率上限闸门，超过判定规范形态选错，整列跳过
+
+
+@dataclass
 class FDConfig:
     """近似函数依赖挖掘参数（用于检测 VAD）。"""
 
@@ -95,6 +117,7 @@ class FDConfig:
     min_distinct_dependents: int = 2         # 不同主导值数下限（防类别不平衡假依赖）
     max_determinant_unique_ratio: float = 0.5  # 决定列唯一率上限（过高跳过）
     min_dependent_unique: int = 2            # 依赖列最少唯一值（排除常量列）
+    semantic_check: bool = True              # 统计候选 FD 后用 LLM 做语义校验（借鉴 Cocoon）
 
 
 @dataclass
@@ -105,8 +128,11 @@ class ExecutionConfig:
     nullable_columns: list[str] = field(default_factory=list)  # 显式跳过 MV 扫描的列
     infer_nullable: bool = False  # 是否根据 LLM 无 not_null + 高空值率推断可空列
     infer_nullable_min_rate: float = 0.5  # infer_nullable 生效时的空值率下限
+    enable_type_check: bool = True  # 启用列逻辑类型一致性校验（bool/int/float/date，借鉴 Cocoon）
     guard: GuardConfig = field(default_factory=GuardConfig)
     typo: TypoConfig = field(default_factory=TypoConfig)
+    dmv: DMVConfig = field(default_factory=DMVConfig)
+    standardize: StandardizeConfig = field(default_factory=StandardizeConfig)
     fd: FDConfig = field(default_factory=FDConfig)
 
 
@@ -166,6 +192,14 @@ class Stage1Config:
                         for tkey, tval in val.items():
                             if hasattr(cfg.execution.typo, tkey):
                                 setattr(cfg.execution.typo, tkey, tval)
+                    elif key == "dmv" and isinstance(val, dict):
+                        for dkey, dval in val.items():
+                            if hasattr(cfg.execution.dmv, dkey):
+                                setattr(cfg.execution.dmv, dkey, dval)
+                    elif key == "standardize" and isinstance(val, dict):
+                        for skey, sval in val.items():
+                            if hasattr(cfg.execution.standardize, skey):
+                                setattr(cfg.execution.standardize, skey, sval)
                     elif key == "fd" and isinstance(val, dict):
                         for fkey, fval in val.items():
                             if hasattr(cfg.execution.fd, fkey):

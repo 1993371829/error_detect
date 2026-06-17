@@ -20,12 +20,19 @@ from typing import Optional, Tuple
 import pandas as pd
 
 from stage_1.config import Stage1Config
+from stage_1.dmv_detect import detect_dmv
 from stage_1.fd_detect import detect_vad
 from stage_1.llm_rules import LLMClient, extract_rules_for_column
 from stage_1.profiling import is_blank, profile_column, save_profiles
 from stage_1.rule_cache import RuleCache
 from stage_1.rule_compiler import RuleCompiler
 from stage_1.rule_guard import should_drop_rule
+from stage_1.standardize_detect import (
+    build_standardize_profile,
+    detect_inconsistencies,
+    extract_canonicalization_spec,
+    top_value_samples,
+)
 from stage_1.typo_detect import detect_typos
 
 # 错误记录统一字段顺序（规则类不填 suggested_fix/confidence）
@@ -33,6 +40,28 @@ ERROR_COLUMNS = [
     "row_id", "column", "value", "error_type",
     "violated_rule", "reason", "suggested_fix", "confidence",
 ]
+
+# 可执行类型一致性校验的逻辑类型（其余如 categorical/string 不触发校验）
+_CHECKABLE_LOGICAL_TYPES = {
+    "bool", "boolean", "int", "integer", "float", "numeric", "number", "date",
+}
+
+
+def _build_type_rule(rule_spec: dict) -> dict | None:
+    """
+    从 LLM 推断的 logical_type 派生一条"逻辑类型一致性"规则（error_type=FI）。
+
+    仅对 bool/int/float/date 生成规则；其余类型返回 None（不校验）。
+    """
+    logical = str(rule_spec.get("logical_type", "") or "").strip().lower()
+    if logical not in _CHECKABLE_LOGICAL_TYPES:
+        return None
+    return {
+        "type": "logical_type",
+        "spec": {"logical_type": logical},
+        "error_type": "FI",
+        "reason": f"列逻辑类型应为 {logical}，此值不符合该类型",
+    }
 
 
 def scan_missing_value(row_id, column: str, value) -> dict | None:
@@ -157,6 +186,7 @@ def run_rule_layer(
     flagged_cells: set = set()  # 已被规则层标记的 (row_id, column)，供后续去重
     rule_report = []
     profiles = []
+    standardize_specs: dict = {}  # col -> LLM 标准化规格（供后续不一致检测）
     max_violation_rate = config.execution.max_violation_rate
     max_samples = config.profiling.max_samples
 
@@ -182,6 +212,12 @@ def run_rule_layer(
             if r.get("type") != "not_null"
             and not should_drop_rule(r, profile, col, config.execution.guard)
         ]
+        # 列逻辑类型一致性校验（借鉴 Cocoon）：由 LLM 推断的 logical_type 派生一条类型规则，
+        # 与其他规则一同经 max_violation_rate 兜底过滤，避免误判类型造成系统性误报。
+        if config.execution.enable_type_check:
+            type_rule = _build_type_rule(rule_spec)
+            if type_rule is not None:
+                exec_rules = exec_rules + [type_rule]
         compiled = [compiler.compile(r) for r in exec_rules]
         kept = filter_bad_rules(df, col, compiled, exec_rules, max_violation_rate)
 
@@ -193,6 +229,23 @@ def run_rule_layer(
                 kept,
             )
         )
+
+        # 不一致表示/标准化规格（借鉴 Cocoon String Outliers）：让 LLM 审阅高频取值，
+        # 归纳"同一概念多种写法"的标准化规格，复用规则缓存文件（命名空间键避免冲突）。
+        # 跳过高基数自由文本/标识列，控制误报。
+        sc = config.execution.standardize
+        if sc.enabled:
+            non_blank_n = profile.get("total_count", 0) - profile.get("null_count", 0)
+            distinct_ratio = (profile.get("unique_count", 0) / non_blank_n) if non_blank_n else 1.0
+            if distinct_ratio <= sc.max_distinct_ratio:
+                samples = top_value_samples(df[col], sc.sample_n)
+                std_profile = build_standardize_profile(str(col), samples)
+                std_spec = cache.get(std_profile)
+                if std_spec is None:
+                    std_spec = extract_canonicalization_spec(llm, str(col), samples)
+                    cache.set(std_profile, std_spec)
+                if std_spec.get("needs_standardization"):
+                    standardize_specs[col] = std_spec
 
         allow_blank = is_nullable_column(col, profile, original_rules, config)
 
@@ -225,9 +278,12 @@ def run_rule_layer(
         print(f"\n列画像已写入: {path}")
         return pd.DataFrame(all_errors), rule_report
 
-    # 跨列/语义检测：Typo(T) 与 函数依赖违反(VAD)
+    # 按 Cocoon 的处理顺序：字符级(T/DMV) -> 列级不一致表示(FI) -> 跨列(VAD)
+    # 列级格式/类型(FI) 已在上面的逐列循环中处理。
     _append_typo_errors(df, config, all_errors, flagged_cells)
-    _append_vad_errors(df, config, all_errors, flagged_cells, rule_report)
+    _append_dmv_errors(df, config, all_errors, flagged_cells)
+    _append_standardization_errors(df, config, all_errors, flagged_cells, standardize_specs)
+    _append_vad_errors(df, config, all_errors, flagged_cells, rule_report, llm)
 
     errors_df = pd.DataFrame(all_errors)
     if not errors_df.empty:
@@ -269,12 +325,72 @@ def _append_typo_errors(
     print(f"Typo 检测新增 {added} 个候选错误 (T)")
 
 
+def _append_dmv_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+) -> None:
+    """运行伪缺失值(DMV)检测并将未被覆盖的单元格并入 all_errors。"""
+    dc = config.execution.dmv
+    if not dc.enabled:
+        return
+    added = 0
+    for col in df.columns:
+        dmv_errors = detect_dmv(
+            df[col], str(col),
+            extra_tokens=dc.extra_tokens or None,
+            detect_numeric_placeholder=dc.detect_numeric_placeholder,
+            numeric_placeholders=dc.numeric_placeholders or None,
+        )
+        for err in dmv_errors:
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"伪缺失值检测新增 {added} 个候选错误 (DMV)")
+
+
+def _append_standardization_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    standardize_specs: dict,
+) -> None:
+    """
+    依据逐列 LLM 标准化规格检测"不一致表示"，并将未被覆盖的单元格并入 all_errors。
+
+    刻意不经过 max_violation_rate（这类错误本就是多数派），由检测器内部的
+    max_flag_rate 闸门兜底防爆量误报。
+    """
+    sc = config.execution.standardize
+    if not sc.enabled or not standardize_specs:
+        return
+    added = 0
+    for col, spec in standardize_specs.items():
+        std_errors = detect_inconsistencies(
+            df[col], str(col), spec, max_flag_rate=sc.max_flag_rate,
+        )
+        for err in std_errors:
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"标准化检测新增 {added} 个候选错误 (FI/不一致表示)")
+
+
 def _append_vad_errors(
     df: pd.DataFrame,
     config: Stage1Config,
     all_errors: list,
     flagged_cells: set,
     rule_report: list,
+    llm: Optional[LLMClient] = None,
 ) -> None:
     """运行 FD 挖掘并将违反依赖的单元格并入 all_errors。"""
     fc = config.execution.fd
@@ -290,6 +406,8 @@ def _append_vad_errors(
         min_distinct_dependents=fc.min_distinct_dependents,
         max_determinant_unique_ratio=fc.max_determinant_unique_ratio,
         min_dependent_unique=fc.min_dependent_unique,
+        llm=llm,
+        semantic_check=fc.semantic_check,
     )
     added = 0
     for err in vad_errors:
@@ -307,6 +425,7 @@ def _append_vad_errors(
                     "dependent": fd.dependent,
                     "confidence": round(fd.confidence, 3),
                     "groups": len(fd.mapping),
+                    "semantic_reason": fd.semantic_reason,
                 }
                 for fd in fds
             ]

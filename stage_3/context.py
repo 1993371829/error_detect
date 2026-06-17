@@ -38,6 +38,7 @@ class SuspectCell:
     subtype: str = ""                # Stage2 子类型（categorical/numeric/surrogate）
     verifiability: str = "verifiable"  # verifiable / consensus_only
     consensus: Optional[dict] = None   # 同 key 共识证据（见 _cell_consensus）
+    column_stats: Optional[dict] = None  # 该列统计画像（借鉴 Cocoon，供 LLM 基于分布判断）
 
     @property
     def consensus_conflict(self) -> bool:
@@ -78,6 +79,78 @@ def compute_normal_samples(df: pd.DataFrame, max_samples: int = 8) -> dict:
             out[col] = []
         else:
             out[col] = non_blank.value_counts().head(max_samples).index.tolist()
+    return out
+
+
+def _to_pattern(s: str) -> str:
+    """将值抽象为字符模式（数字->d, 大写->L, 小写->l），用于呈现该列的主导格式。"""
+    out = []
+    for c in s:
+        if c.isdigit():
+            out.append("d")
+        elif c.isupper():
+            out.append("L")
+        elif c.islower():
+            out.append("l")
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+def compute_column_stats(df: pd.DataFrame, max_top: int = 8) -> dict:
+    """
+    借鉴 Cocoon：为每列计算轻量统计画像，供 Stage 3 prompt 注入，帮助 LLM 基于分布
+    （而非仅单值）判断 string/pattern/numeric outlier 与伪缺失值。
+
+    返回 col -> {
+        null_rate, distinct_count, total,
+        top_values: [[value, count], ...]（频次降序，含占比信息由 count/total 推得）,
+        dominant_patterns: [模式, ...]（字符形态 top 3）,
+        numeric_range: {min, max, mean} 或 None（仅当 >=80% 可解析为数值）,
+    }
+    """
+    out: dict = {}
+    total = len(df)
+    for col in df.columns:
+        series = df[col]
+        blank_mask = series.map(is_blank)
+        non_blank = series[~blank_mask].astype(str)
+        null_rate = round(float(blank_mask.sum()) / total, 3) if total else 0.0
+        if non_blank.empty:
+            out[str(col)] = {
+                "null_rate": null_rate,
+                "distinct_count": 0,
+                "total": total,
+                "top_values": [],
+                "dominant_patterns": [],
+                "numeric_range": None,
+            }
+            continue
+
+        vc = non_blank.value_counts()
+        top_values = [[str(v), int(c)] for v, c in vc.head(max_top).items()]
+
+        patterns = non_blank.map(_to_pattern).value_counts().head(3)
+        dominant_patterns = [str(p) for p in patterns.index.tolist()]
+
+        nums = pd.to_numeric(non_blank, errors="coerce").dropna()
+        if len(nums) >= 0.8 * len(non_blank) and len(nums) > 0:
+            numeric_range = {
+                "min": float(nums.min()),
+                "max": float(nums.max()),
+                "mean": round(float(nums.mean()), 2),
+            }
+        else:
+            numeric_range = None
+
+        out[str(col)] = {
+            "null_rate": null_rate,
+            "distinct_count": int(non_blank.nunique()),
+            "total": total,
+            "top_values": top_values,
+            "dominant_patterns": dominant_patterns,
+            "numeric_range": numeric_range,
+        }
     return out
 
 
@@ -252,9 +325,11 @@ def build_row_contexts(
     semantic_types: dict,
     normal_samples: dict,
     consensus_map: Optional[dict] = None,
+    column_stats: Optional[dict] = None,
 ) -> list[RowContext]:
     """按 row_id 分组候选，组装 RowContext 列表（按 row_id 升序）。"""
     consensus_map = consensus_map or {}
+    column_stats = column_stats or {}
     contexts: list[RowContext] = []
     candidates = candidates.copy()
     candidates["row_id"] = candidates["row_id"].astype(int)
@@ -288,6 +363,7 @@ def build_row_contexts(
                 subtype=str(r.get("subtype", "") or "") if has_subtype else "",
                 verifiability="consensus_only" if col in consensus_map else "verifiable",
                 consensus=consensus,
+                column_stats=column_stats.get(col),
             ))
         contexts.append(RowContext(row_id=int(row_id), row_values=row_values, suspects=suspects))
     return contexts
@@ -308,6 +384,7 @@ def load_contexts(
     candidates = read_table(candidates_csv)
     semantic_types = load_semantic_types(rules_json)
     normal_samples = compute_normal_samples(df, max_samples=max_normal_samples)
+    column_stats = compute_column_stats(df, max_top=max_normal_samples)
 
     candidate_cols = [str(c) for c in candidates["column"].dropna().unique()]
     consensus_map = compute_consensus(
@@ -316,6 +393,7 @@ def load_contexts(
     )
 
     contexts = build_row_contexts(
-        df, candidates, semantic_types, normal_samples, consensus_map=consensus_map,
+        df, candidates, semantic_types, normal_samples,
+        consensus_map=consensus_map, column_stats=column_stats,
     )
     return df, contexts

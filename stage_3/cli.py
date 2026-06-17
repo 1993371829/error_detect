@@ -30,7 +30,7 @@ from stage_3.cache import ResponseCache
 from stage_3.config import Stage3Config
 from stage_3.context import load_contexts
 from stage_3.prompt import build_prompt
-from stage_3.verifier import verify_contexts
+from stage_3.verifier import propagate_fix_mappings, verify_contexts
 
 RESULT_COLUMNS = [
     "row_id", "column", "value", "prior_error_type", "prior_source",
@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> None:
         contexts, llm, cache=cache,
         reject_conf_threshold=cfg.reject_conf_threshold,
     )
+    results = propagate_fix_mappings(results)
     results_df = pd.DataFrame(results).reindex(columns=RESULT_COLUMNS)
 
     out = Path(cfg.paths.results_out)

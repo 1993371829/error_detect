@@ -7,6 +7,8 @@ llm:
   base_url: "https://api.openai.com/v1"
   model: "gpt-4o-mini"
   temperature: 0                   # 规则归纳需要稳定输出
+  max_tokens: 4096                 # 输出上限，防高基数自由文本列 JSON 被截断（0=不显式传）
+  max_retries: 1                   # JSON 解析/接口调用失败时的额外重试次数
 
 # 数据画像参数
 profiling:
@@ -18,6 +20,7 @@ execution:
   nullable_columns: []             # 显式跳过 MV 扫描的列名列表
   infer_nullable: false            # 根据 LLM 无 not_null + 高空值率推断可空列（默认关闭）
   infer_nullable_min_rate: 0.5     # infer_nullable 生效时的空值率下限
+  enable_type_check: true          # 列逻辑类型一致性校验（bool/int/float/date，借鉴 Cocoon）
   guard:
     enabled: true
     top5_coverage_structured_min: 0.5
@@ -35,6 +38,18 @@ execution:
     min_anchor_len: 2              # 锚点最小长度
     skip_numeric: true             # 跳过数值列（typo 由 FI/VAD 覆盖）
     numeric_min_ratio: 0.8         # 判定数值列的可解析比例
+  # 伪缺失值检测（DMV）：识别非空但语义为缺失的占位值（?/unknown/missing/...）
+  dmv:
+    enabled: true
+    extra_tokens: []               # 默认词表外追加的伪缺失 token
+    detect_numeric_placeholder: false  # 是否检测占位数字（9999/-1 等，默认关闭控误报）
+    numeric_placeholders: []       # 自定义占位数字（留空用内置默认集）
+  # 不一致表示/标准化检测（借鉴 Cocoon String Outliers）：捕获多数派单位/格式不一致
+  standardize:
+    enabled: true
+    sample_n: 50                   # 发给 LLM 的每列 top-N 高频 distinct 值
+    max_distinct_ratio: 0.6        # distinct/非空 超过此值视为自由文本/标识列，跳过
+    max_flag_rate: 0.95            # 命中率上限闸门（防 LLM 误选规范形态导致爆量误报）
   # 近似函数依赖挖掘，用于发现跨列依赖违反（VAD）
   fd:
     enabled: true
@@ -46,6 +61,7 @@ execution:
     min_distinct_dependents: 2     # 不同主导值数下限（防类别不平衡假依赖）
     max_determinant_unique_ratio: 0.5  # 决定列唯一率上限（过高跳过）
     min_dependent_unique: 2        # 依赖列最少唯一值
+    semantic_check: true           # 统计候选 FD 后用 LLM 做语义校验（借鉴 Cocoon）
 
 # 目录布局：data/ 仅原始数据；生成物写入 output/ 子目录
 layout:
