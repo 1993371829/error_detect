@@ -535,6 +535,58 @@ flowchart LR
 
 ---
 
+## 七·附：单轮回灌闭环（S3 判定回写 clean_mask）
+
+**动机：** `clean_mask` 仅由 Stage 1 errors 取反构建，Stage 2/3 判定从不回写；
+Stage 1 漏报、Stage 2 发现、Stage 3 确认的脏格会以 True 污染 Stage 2 训练集。
+把 Stage 3 高置信判定回灌掩码后重训 Stage 2，可提纯训练分布。
+
+**工具（可选，未接入主流程）：**
+
+| 文件 | 作用 |
+|------|------|
+| `stage_2/refine_mask.py` | 用 `stage3_results.csv` 修正掩码（tau 阈值 + MV 硬锚点 + 每列剔除上限 + `--no-include` 只剔除不找回），产出 `{dataset}_clean_mask_r1.csv` |
+| `run_feedback.py` | 编排 round-0 → refine → round-1，并对比污染率与 P/R/F1 |
+
+**flights 调参实测（LLM-free Stage2 评估；每列剔除上限若无标注为 5%）：**
+
+| 配置 | leak% | DIST_F1 | 合并_F1 |
+|------|-------|---------|---------|
+| baseline（原始掩码） | 20.51 | 0.347 | 0.742 |
+| tau=0.8 both（找回开启） | 18.68 | 0.341 | 0.735 |
+| tau=0.8 exclude-only | 18.64 | 0.343 | 0.738 |
+| tau=0.7 exclude-only | 18.38 | 0.351 | 0.744 |
+| **tau=0.6 exclude-only** | 18.33 | **0.358** | **0.749** |
+| tau=0.5 exclude-only | 18.32 | 0.357 | 0.748 |
+| tau=0.6 exclude-only cap10% | 17.46 | 0.355 | 0.747 |
+| tau=0.5 exclude-only cap20% | 17.10 | 0.350 | 0.744 |
+
+**结论：配置得当时为稳健的小幅正收益。**
+
+- **只剔除不找回（`--no-include`）在每个 tau 下都优于"找回"**：找回 = 把 S3 否决的格加回训练集，会引入噪声。
+- **降 tau 有益但 0.6 触底**：tau 0.6/0.5/0.4 几乎相同，因 S3 置信度多 ≥0.6。
+- **每列剔除上限别放大**：cap 10%/20% 虽进一步压低污染，F1 却回落——过度剔除缩小训练集、误伤稀有值（与"类别词表折叠"同源教训）。5% 恰当。
+- **最优：`tau=0.6 + --no-include + cap 5%`**，DIST F1 +0.011、合并 F1 +0.007、污染 −2.18pp，P/R 双升（已设为工具默认 tau）。
+
+**beers 交叉验证（同一最优配置 tau=0.6 + --no-include + cap 5%）：**
+
+| 指标 | round-0 | round-1(refined) | 变化 |
+|------|---------|------------------|------|
+| 掩码污染 leak_rate | 9.28% | 8.28% | −1.00pp |
+| Stage2(DIST) F1 | 0.236 | 0.251 | +0.015 |
+| 合并(S1+S2) F1 | 0.506 | 0.512 | +0.006 |
+
+- 方向与 flights 一致：P/R 双升、污染下降、F1 小幅正收益（剔除 264 格中 229 个确为脏，87% 精度）。
+- **结论：单轮回灌（最优配置）在 flights / beers 上跨数据集一致地带来稳健小幅提升。** 收益幅度偏小，
+  仍保留为按需工具（`stage_2/refine_mask.py` + `run_feedback.py`）；如需接入主流程，建议在
+  `run_feedback.py` 之上加 2-3 轮迭代与收敛判据，并在更多数据集上确认无回退后再固化默认。
+
+> 顺带修复既有 bug：`stage_2.config.set_paths_from_dataset` 此前对 `--clean-mask` /
+> `--stage1-errors` / `--candidates-out` / `--combined-out` 等覆盖参数"只在无覆盖时设默认、
+> 从不应用覆盖值"，导致这些 CLI 参数被静默忽略；现已修复（覆盖优先，否则数据集默认）。
+
+---
+
 ## 八、代码入口速查
 
 | 阶段 | CLI 入口 | 核心函数 |

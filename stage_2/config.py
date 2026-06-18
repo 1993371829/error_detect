@@ -92,15 +92,16 @@ class Stage2Config:
         """根据 --input 解析 Stage 2 依赖的全部路径。"""
         dp = resolve_dataset_paths(dirty_csv, self.layout, dataset=dataset)
         ov = cli_overrides or {}
+
+        def _pick(key: str, default: Path) -> str:
+            # CLI 显式指定优先；否则按数据集默认路径（修复：此前 override 被静默忽略）
+            val = ov.get(key)
+            return val if val is not None else rel_path(default)
+
         self.paths.input_csv = rel_path(dp.dirty_csv)
-        if ov.get("clean_mask") is None:
-            self.paths.clean_mask = rel_path(dp.clean_mask)
-        if ov.get("stage1_errors") is None:
-            self.paths.stage1_errors = rel_path(dp.errors)
-        if ov.get("candidates_out") is None:
-            self.paths.candidates_out = rel_path(dp.stage2_candidates)
-        if ov.get("combined_out") is None:
-            self.paths.combined_out = rel_path(dp.combined_candidates)
-        if ov.get("clean_csv") is None:
-            self.paths.clean_csv = rel_path(dp.clean_csv)
+        self.paths.clean_mask = _pick("clean_mask", dp.clean_mask)
+        self.paths.stage1_errors = _pick("stage1_errors", dp.errors)
+        self.paths.candidates_out = _pick("candidates_out", dp.stage2_candidates)
+        self.paths.combined_out = _pick("combined_out", dp.combined_candidates)
+        self.paths.clean_csv = _pick("clean_csv", dp.clean_csv)
         return dp
