@@ -94,6 +94,19 @@ def extract_canonicalization_spec(llm, column: str, samples: list[tuple[str, int
     return {"needs_standardization": False}
 
 
+def _normalize_replacement(rep: str) -> str:
+    """
+    把 JS/PCRE 风格的分组反向引用 $1 / ${1} 转成 Python re.sub 的 \\1。
+
+    LLM 经常按 JavaScript/PCRE 习惯输出 "$1 oz$2" 这类替换式，但 Python 的 re.sub
+    只认 \\1，"$1" 会被当字面量，导致正则把所有值替换成字面串（如 "$1 oz$2"），
+    命中率飙到 100% 触发 max_flag_rate 闸门、整列被跳过（典型如 beers 的 ounces）。
+    """
+    rep = re.sub(r"\$\{(\d+)\}", r"\\\1", rep)
+    rep = re.sub(r"\$(\d+)", r"\\\1", rep)
+    return rep
+
+
 def _compile_normalizers(spec: dict):
     """把 spec 编译为 (value_map, [(compiled_pattern, replacement)])。非法正则会被丢弃。"""
     value_map = spec.get("value_map") or {}
@@ -109,8 +122,9 @@ def _compile_normalizers(spec: dict):
         rep = item.get("replacement", "")
         if not pat:
             continue
+        rep = _normalize_replacement(str(rep))
         try:
-            regexes.append((re.compile(pat), str(rep)))
+            regexes.append((re.compile(pat), rep))
         except re.error:
             print(f"[std-warn] 非法标准化正则，跳过: {pat}")
     return value_map, regexes
@@ -122,7 +136,11 @@ def _canonicalize(value: str, value_map: dict, regexes: list) -> str:
         return value_map[value]
     out = value
     for pattern, rep in regexes:
-        out = pattern.sub(rep, out)
+        try:
+            out = pattern.sub(rep, out)
+        except re.error:
+            # 替换式含无效组引用等（仅在实际匹配时才暴露）：跳过该正则，不中断检测
+            continue
     return out
 
 
