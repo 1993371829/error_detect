@@ -48,6 +48,7 @@ class Stage3Config:
     min_dominance: float = 0.5          # 某列被视为"共识型列"的组内主导占比门槛
     min_lift: float = 0.15              # 组内占比相对全局基准占比的最小提升（排除类别不平衡伪共识）
     reject_conf_threshold: float = 0.85  # 共识冲突候选被 LLM 否决所需的最低把握
+    protect_stage1_mv: bool = True       # Stage1 确定性缺失值不被 LLM 否决（确定信号，零误报回退）
     layout: OutputLayout = field(default_factory=OutputLayout)
     paths: PathsConfig = field(default_factory=PathsConfig)
     llm: Stage1Config = field(default=None)

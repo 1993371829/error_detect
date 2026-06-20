@@ -54,6 +54,9 @@ flowchart LR
 | 伪缺失值检测 | 词表匹配识别非空但语义为缺失的占位值（`?`/`unknown`/`missing`/占位数字），标 DMV（借鉴 Cocoon） |
 | 列类型一致性校验 | LLM 推断列逻辑类型（bool/int/float/date），校验不符该类型的值，标 FI（借鉴 Cocoon） |
 | 拼写错误检测 | 基于频次 + 编辑距离，发现低频值与高频锚点的近似拼写（T） |
+| 标准化检测 | LLM 归纳列内规范表示形态，标记不一致取值（FI） |
+| 元数据泄漏检测 | 识别 RIS/MEDLINE/PubMed 标签混入字段值（FI/metadata_leakage），长度离群门控降误报 |
+| 跨列对调检测 | 宽松统计发现"全名↔标准缩写"列对，LLM 语义确认后标记两列对调行（FI/column_swap） |
 | 跨列依赖挖掘 | 近似函数依赖（FD）挖掘，发现如 ZipCode → City 的强依赖违反（VAD） |
 | FD 语义校验 | 统计候选 FD 后用 LLM 复核其是否现实语义上成立，仅确认者产出 VAD（借鉴 Cocoon，降伪依赖误报） |
 | 产出干净掩码 | 生成 `output/mask/{dataset}_clean_mask.csv`，供 Stage 2 训练 |
@@ -65,7 +68,7 @@ flowchart LR
 |------|------|---------|
 | **MV** | 缺失值 | 空串、`empty`、NaN 等哨兵出现在不可空列 |
 | **DMV** | 伪缺失值 | 非空但语义为缺失：`?`、`unknown`、`missing`、`n.a.`、占位数字 `9999` |
-| **FI** | 格式 / 长度 / 范围 / 取值集合 / 逻辑类型 | 电话格式错误、ZIP 非 5 位、数值超范围、非法枚举、yes/no 列混入数字 |
+| **FI** | 格式 / 长度 / 范围 / 取值集合 / 逻辑类型 / 元数据泄漏 / 列对调 | 电话格式错误、ZIP 非 5 位、数值超范围、非法枚举、yes/no 列混入数字；RIS 标签泄漏；期刊全名/缩写两列互换 |
 | **T** | 拼写错误 | `birmingham` 写成 `birminghm`，低频 typo 相对高频锚点 |
 | **VAD** | 跨列依赖违反 | ZipCode 与 City 不匹配、MeasureCode 与 Condition 不一致 |
 
@@ -151,9 +154,11 @@ flowchart LR
 | 跨行共识证据 | 自动探测 key 列，为候选列计算同 key 多数值证据（解决 flights 多源时刻冲突） |
 | LLM 精检 | 一次 LLM 调用处理一行内多个可疑格，输出 JSON 判定 |
 | 误报过滤 | 将前序 DIST 误报（如 `Stateavg` 派生列）判为 `NONE`，不再进入最终结果 |
+| 确定性 MV 保护 | Stage 1 来源的 MV 不允许被 LLM 二次否决（确定信号；多数据集验证零误报回退） |
+| 共识冲突保护 | Stage 2 来源且跨行共识冲突的候选，LLM 低把握（<0.85）否决时驳回，维持为错误 |
 | 类型细化 | 将笼统的 `DIST` 细分为 VAD / FI / OTHER 等，或维持 MV/DMV/FI/T/VAD |
 | 修复建议 + 映射复用 | 输出标准化 `suggested_fix`（old→new 映射），并把同列同脏值的修复在单元格间复用补全（借鉴 Cocoon） |
-| 响应缓存 | `cache/stage3_cache.json` 缓存相同 prompt 的 LLM 响应，降低成本 |
+| 响应缓存 | `cache/stage3_cache.json` 缓存相同 prompt 的 LLM 响应，原子写防截断损坏 |
 
 **错误类型映射：**
 
@@ -286,7 +291,10 @@ flowchart TD
 
     LOOP_COL -->|列循环结束| TYPO["Typo 检测 typo_detect.py<br/>频次+编辑距离 → T<br/>跳过 flagged_cells"]
     TYPO --> DMV["DMV 检测 dmv_detect.py<br/>伪缺失词表匹配 → DMV<br/>跳过 flagged_cells"]
-    DMV --> FD["FD 挖掘 fd_detect.py<br/>近似函数依赖<br/>semantic_check 时 LLM 复核<br/>→ VAD，跳过 flagged_cells"]
+    DMV --> STD["标准化检测 standardize_detect.py<br/>LLM 归纳规范形态 → FI<br/>跳过 flagged_cells"]
+    STD --> LEAK["元数据泄漏 leakage_detect.py<br/>RIS/MEDLINE 标签 → FI<br/>跳过 flagged_cells"]
+    LEAK --> XCOL["跨列对调 xcol_detect.py<br/>统计发现 + LLM 确认列对<br/>→ FI/column_swap<br/>跳过 flagged_cells"]
+    XCOL --> FD["FD 挖掘 fd_detect.py<br/>近似函数依赖<br/>semantic_check 时 LLM 复核<br/>→ VAD，跳过 flagged_cells"]
     FD --> OUT1["output/stage1/{dataset}_errors.csv"]
     FD --> OUT2["output/stage1/{dataset}_rules.json"]
     FD --> OUT3["build_clean_mask → output/mask/{dataset}_clean_mask.csv"]
@@ -315,6 +323,9 @@ flowchart TD
 | `rule_compiler.py` | JSON 规则 → 可执行校验函数（含 `logical_type` 类型一致性） |
 | `typo_detect.py` | 频次 + Levenshtein → T |
 | `dmv_detect.py` | 伪缺失值词表匹配 → DMV |
+| `standardize_detect.py` | LLM 归纳列内规范表示形态 → FI |
+| `leakage_detect.py` | RIS/MEDLINE/PubMed 元数据泄漏 → FI/metadata_leakage |
+| `xcol_detect.py` | 跨列"全名↔标准缩写"对调检测（统计发现 + LLM 语义确认）→ FI/column_swap |
 | `fd_detect.py` | 近似 FD 挖掘 + LLM 语义校验 → VAD |
 
 ### Stage 1 去重机制
@@ -413,7 +424,9 @@ flowchart TD
 
     RAW --> PARSE["_parse_response → judgments"]
     PARSE --> NORM["逐可疑格 _normalize<br/>is_error / error_type / confidence<br/>suggested_fix / reason"]
-    NORM --> FALLBACK{该格有判定?}
+    NORM --> MVPROT{Stage1-MV 保护?<br/>prior=MV & source=stage1<br/>LLM 判 NONE → 维持错误}
+    MVPROT --> CONSENSUS{Stage2 共识冲突?<br/>LLM 低把握否决 → 驳回}
+    CONSENSUS --> FALLBACK{该格有判定?}
     FALLBACK -->|无| FB["_fallback_judgment<br/>维持错误 conf=0.5"]
     FALLBACK -->|有| KEEP["采用 LLM 判定"]
 
@@ -430,7 +443,16 @@ flowchart TD
 | DIST | 可细分为 VAD / FI / DMV / OTHER / **NONE** |
 | NONE | 误报否决（如前序 Stateavg 类误报） |
 
-解析失败时保守兜底：维持前序错误，`confidence=0.5`；对跨行共识冲突的 Stage2 候选有缺证据保护（LLM 低把握否决时驳回，保召回）。
+解析失败时保守兜底：维持前序错误，`confidence=0.5`。
+
+**判定保护（保召回、零误报回退）：**
+
+| 保护 | 触发条件 | 行为 | 配置 |
+|------|---------|------|------|
+| **确定性 MV 保护** | `prior_source=stage1` 且 `prior_error_type=MV`，LLM 判 `NONE` | 维持为错误，不因 LLM 高置信否决而丢弃 | `protect_stage1_mv=true`（默认）；`--no-protect-mv` 关闭 |
+| **共识冲突保护** | `prior_source=stage2` 且 `consensus_conflict=true`，LLM 低把握（<0.85）判 `NONE` | 维持为错误，补 `suggested_fix=majority_value` | `reject_conf_threshold=0.85` |
+
+**多数据集验证（MV 保护）：** rayyan F1 +0.013 / hospital F1 +0.022 / flights F1 +0.001 / beers 不变，**零精度退化**。
 
 ### Stage 3 关键模块
 
@@ -532,10 +554,32 @@ flowchart LR
 | DIST 阈值 | `score.py` `abs_prob_floor`, `quantile`, `margin`, `min_predictability` | 召回/精度关键杠杆 |
 | LLM 精检成本 | `stage_3/cache.py`, `--limit` | 按行分组，一次 LLM 处理多格 |
 | 精检质量 | `prompt.py` 跨列原则 + 列统计画像 + 修复映射复用 | Stateavg 等派生列误报、标准化修复 |
+| Stage1-MV 保护 | `verifier.py` `protect_stage1_mv` | 阻止 LLM 误杀确定性缺失值，多数据集零 FP 回退 |
+| 跨列对调检测 | `xcol_detect.py` `execution.xcol.*` | 期刊全名/缩写对调等跨列错位；LLM 语义门控过滤伪对 |
 
 ---
 
-## 七·附：单轮回灌闭环（S3 判定回写 clean_mask）
+## 七·附 A：跨列"全名↔标准缩写"对调检测
+
+**动机：** 部分脏数据中两列语义角色固定（如 `journal_title`=全名、`journal_abbreviation`=标准缩写），
+但部分行两列值被对调。这类错误单列规则/分布层均无法发现，需跨列关系检测。
+
+**方法（借鉴 FD 语义校验）：**
+
+1. **宽松统计发现候选列对**：full 列显著更长、abbrev 列多 token、多数行 abbrev 为 full 的严格前缀缩写。
+2. **LLM 语义确认**：确认列对确为"全名↔标准缩写"关系（过滤如 `Cast↔Actors` 等伪对）。
+3. **标记对调行**：full 列存了缩写、abbrev 列存了全名 → 两格均标 `FI/column_swap`，`suggested_fix` 为交换值。
+
+**配置：** `execution.xcol.enabled`（默认 true）、`min_rows` / `min_len_ratio` / `min_abbrev_rate` / `semantic_check`。
+
+**安全门控：** 纯统计自动发现会在 hospital/movies 等数据集误判大量伪对；LLM 语义确认后仅 rayyan 的
+`journal_title↔journal_abbreviation` 通过（movies 的 `Cast↔Actors` 被拒绝），其余数据集发现 0 候选对 → **零影响**。
+
+**rayyan 实测：** 标记 140 格 / 138 TP / 2 FP（精度 0.986）；叠加 MV 保护后端到端 F1 **0.733**（起点 0.679）。
+
+---
+
+## 七·附 B：单轮回灌闭环（S3 判定回写 clean_mask）
 
 **动机：** `clean_mask` 仅由 Stage 1 errors 取反构建，Stage 2/3 判定从不回写；
 Stage 1 漏报、Stage 2 发现、Stage 3 确认的脏格会以 True 污染 Stage 2 训练集。

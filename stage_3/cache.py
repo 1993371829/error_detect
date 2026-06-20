@@ -31,5 +31,8 @@ class ResponseCache:
 
     def set(self, prompt: str, response: str) -> None:
         self.cache[self._key(prompt)] = response
-        with open(self.path, "w", encoding="utf-8") as f:
+        # 原子写：先写临时文件再替换，避免进程中断时截断/损坏缓存文件
+        tmp = f"{self.path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.cache, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, self.path)

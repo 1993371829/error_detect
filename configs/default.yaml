@@ -50,6 +50,20 @@ execution:
     sample_n: 50                   # 发给 LLM 的每列 top-N 高频 distinct 值
     max_distinct_ratio: 0.6        # distinct/非空 超过此值视为自由文本/标识列，跳过
     max_flag_rate: 0.95            # 命中率上限闸门（防 LLM 误选规范形态导致爆量误报）
+  # 引用/元数据泄漏检测：识别 RIS/MEDLINE/PubMed 标签混入字段值（常见于文献类脏数据）
+  leakage:
+    enabled: true
+    skip_numeric: true             # 跳过数值列（不可能是文献元数据泄漏）
+    numeric_min_ratio: 0.8         # 判定数值列的可解析比例
+    min_len_ratio: 3.0             # 长度离群门控：仅标记长度 > 列中位长度*该比值的格（0=关闭）
+  # 跨列"全名↔标准缩写"一致性检测：发现并修复两列对调（如期刊全名/缩写互换）
+  xcol:
+    enabled: true
+    min_rows: 30                   # 列对两列都非空的最小行数
+    min_len_ratio: 1.4             # full 列中位长度 / abbrev 列中位长度 的下限
+    min_multi_token_rate: 0.5      # abbrev 列多 token 行占比下限（排除单码列）
+    min_abbrev_rate: 0.55          # 多数行 abbrev 为 full 严格缩写的占比下限（宽松发现）
+    semantic_check: true           # 用 LLM 确认列对确为"全名↔缩写"关系（过滤伪对）
   # 近似函数依赖挖掘，用于发现跨列依赖违反（VAD）
   fd:
     enabled: true

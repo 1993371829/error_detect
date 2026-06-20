@@ -22,6 +22,7 @@ import pandas as pd
 from stage_1.config import Stage1Config
 from stage_1.dmv_detect import detect_dmv
 from stage_1.fd_detect import detect_vad
+from stage_1.leakage_detect import detect_leakage
 from stage_1.llm_rules import LLMClient, extract_rules_for_column
 from stage_1.profiling import is_blank, profile_column, save_profiles
 from stage_1.rule_cache import RuleCache
@@ -34,6 +35,12 @@ from stage_1.standardize_detect import (
     top_value_samples,
 )
 from stage_1.typo_detect import detect_typos
+from stage_1.xcol_detect import (
+    build_xcol_profile,
+    detect_swaps,
+    discover_abbrev_pairs,
+    validate_abbrev_pair,
+)
 
 # 错误记录统一字段顺序（规则类不填 suggested_fix/confidence）
 ERROR_COLUMNS = [
@@ -283,6 +290,8 @@ def run_rule_layer(
     _append_typo_errors(df, config, all_errors, flagged_cells)
     _append_dmv_errors(df, config, all_errors, flagged_cells)
     _append_standardization_errors(df, config, all_errors, flagged_cells, standardize_specs)
+    _append_leakage_errors(df, config, all_errors, flagged_cells)
+    _append_xcol_errors(df, config, all_errors, flagged_cells, llm, cache)
     _append_vad_errors(df, config, all_errors, flagged_cells, rule_report, llm)
 
     errors_df = pd.DataFrame(all_errors)
@@ -382,6 +391,85 @@ def _append_standardization_errors(
             flagged_cells.add(cell)
             added += 1
     print(f"标准化检测新增 {added} 个候选错误 (FI/不一致表示)")
+
+
+def _append_leakage_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+) -> None:
+    """运行引用/元数据泄漏检测，将未被覆盖的单元格并入 all_errors（交 Stage 3 核验）。"""
+    lc = config.execution.leakage
+    if not lc.enabled:
+        return
+    added = 0
+    for col in df.columns:
+        leak_errors = detect_leakage(
+            df[col], str(col),
+            skip_numeric=lc.skip_numeric,
+            numeric_min_ratio=lc.numeric_min_ratio,
+            min_len_ratio=lc.min_len_ratio,
+        )
+        for err in leak_errors:
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"元数据泄漏检测新增 {added} 个候选错误 (FI/metadata_leakage)")
+
+
+def _append_xcol_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    llm: Optional[LLMClient] = None,
+    cache=None,
+) -> None:
+    """发现"全名↔缩写"列对（LLM 语义确认）并标记两列对调的行（交 Stage 3 复核）。"""
+    xc = config.execution.xcol
+    if not xc.enabled or llm is None:
+        return
+    pairs = discover_abbrev_pairs(
+        df,
+        min_rows=xc.min_rows,
+        min_len_ratio=xc.min_len_ratio,
+        min_multi_token_rate=xc.min_multi_token_rate,
+        min_abbrev_rate=xc.min_abbrev_rate,
+    )
+    added = 0
+    for full_col, abbrev_col, _rate in pairs:
+        samples = [
+            (str(df[full_col][i]), str(df[abbrev_col][i]))
+            for i in range(len(df))
+            if not is_blank(df[full_col][i]) and not is_blank(df[abbrev_col][i])
+        ][:30]
+        if xc.semantic_check:
+            confirmed = None
+            if cache is not None:
+                profile = build_xcol_profile(full_col, abbrev_col, samples)
+                cached = cache.get(profile)
+                if cached is not None and isinstance(cached, dict):
+                    confirmed = bool(cached.get("is_abbreviation_pair"))
+            if confirmed is None:
+                confirmed = validate_abbrev_pair(llm, full_col, abbrev_col, samples)
+                if cache is not None:
+                    cache.set(build_xcol_profile(full_col, abbrev_col, samples),
+                              {"is_abbreviation_pair": confirmed})
+            if not confirmed:
+                print(f"[xcol] 列对 {full_col}↔{abbrev_col} 经 LLM 判定非'全名↔缩写'关系，跳过")
+                continue
+        for err in detect_swaps(df, full_col, abbrev_col):
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"跨列对调检测新增 {added} 个候选错误 (FI/column_swap)")
 
 
 def _append_vad_errors(

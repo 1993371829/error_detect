@@ -105,6 +105,28 @@ class StandardizeConfig:
 
 
 @dataclass
+class LeakageConfig:
+    """引用/元数据泄漏检测参数（识别 RIS/MEDLINE 标签混入字段值，常见于文献类脏数据）。"""
+
+    enabled: bool = True
+    skip_numeric: bool = True        # 跳过数值列（不可能是文献元数据泄漏）
+    numeric_min_ratio: float = 0.8   # 判定数值列的可解析比例
+    min_len_ratio: float = 3.0       # 长度离群门控：仅标记长度 > 列中位长度*该比值的格（0=关闭）
+
+
+@dataclass
+class XColConfig:
+    """跨列"全名↔标准缩写"一致性检测参数（发现并修复两列对调，借鉴 CFD + LLM 语义校验）。"""
+
+    enabled: bool = True
+    min_rows: int = 30               # 列对两列都非空的最小行数
+    min_len_ratio: float = 1.4       # full 列中位长度 / abbrev 列中位长度 的下限
+    min_multi_token_rate: float = 0.5  # abbrev 列多 token 行占比下限（排除单码列）
+    min_abbrev_rate: float = 0.55    # 多数行 abbrev 为 full 严格缩写的占比下限（宽松发现）
+    semantic_check: bool = True      # 用 LLM 确认列对确为"全名↔缩写"关系（过滤伪对）
+
+
+@dataclass
 class FDConfig:
     """近似函数依赖挖掘参数（用于检测 VAD）。"""
 
@@ -133,6 +155,8 @@ class ExecutionConfig:
     typo: TypoConfig = field(default_factory=TypoConfig)
     dmv: DMVConfig = field(default_factory=DMVConfig)
     standardize: StandardizeConfig = field(default_factory=StandardizeConfig)
+    leakage: LeakageConfig = field(default_factory=LeakageConfig)
+    xcol: XColConfig = field(default_factory=XColConfig)
     fd: FDConfig = field(default_factory=FDConfig)
 
 
@@ -200,6 +224,14 @@ class Stage1Config:
                         for skey, sval in val.items():
                             if hasattr(cfg.execution.standardize, skey):
                                 setattr(cfg.execution.standardize, skey, sval)
+                    elif key == "leakage" and isinstance(val, dict):
+                        for lkey, lval in val.items():
+                            if hasattr(cfg.execution.leakage, lkey):
+                                setattr(cfg.execution.leakage, lkey, lval)
+                    elif key == "xcol" and isinstance(val, dict):
+                        for xkey, xval in val.items():
+                            if hasattr(cfg.execution.xcol, xkey):
+                                setattr(cfg.execution.xcol, xkey, xval)
                     elif key == "fd" and isinstance(val, dict):
                         for fkey, fval in val.items():
                             if hasattr(cfg.execution.fd, fkey):

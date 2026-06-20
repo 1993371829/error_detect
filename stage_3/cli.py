@@ -59,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="判定共识型列的组内主导占比门槛（默认 0.5）")
     p.add_argument("--min-lift", type=float, default=None,
                    help="组内占比相对全局基准的最小提升，排除类别不平衡伪共识（默认 0.15）")
+    p.add_argument("--no-protect-mv", action="store_true",
+                   help="关闭 Stage1 缺失值保护（默认开启，不允许 LLM 否决确定性 MV）")
     return p
 
 
@@ -92,6 +94,8 @@ def main(argv: list[str] | None = None) -> None:
         cfg.min_dominance = args.min_dominance
     if args.min_lift is not None:
         cfg.min_lift = args.min_lift
+    if args.no_protect_mv:
+        cfg.protect_stage1_mv = False
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
@@ -127,6 +131,7 @@ def main(argv: list[str] | None = None) -> None:
     results = verify_contexts(
         contexts, llm, cache=cache,
         reject_conf_threshold=cfg.reject_conf_threshold,
+        protect_stage1_mv=cfg.protect_stage1_mv,
     )
     results = propagate_fix_mappings(results)
     results_df = pd.DataFrame(results).reindex(columns=RESULT_COLUMNS)

@@ -56,10 +56,15 @@ def _is_stage2(s: SuspectCell) -> bool:
     return "stage2" in (s.prior_source or "").lower()
 
 
+def _is_stage1(s: SuspectCell) -> bool:
+    return "stage1" in (s.prior_source or "").lower()
+
+
 def _normalize(
     judg: dict,
     s: SuspectCell,
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
+    protect_stage1_mv: bool = True,
 ) -> dict:
     """规整单格判定字段，容错缺省值；对跨行共识冲突的候选施加缺证据保护。"""
     etype = str(judg.get("error_type", "") or "").upper()
@@ -78,6 +83,34 @@ def _normalize(
     fix = judg.get("suggested_fix")
     fix = None if fix in (None, "", "null") else str(fix)
     llm_reason = str(judg.get("reason", "") or "")
+
+    # 确定性缺失值保护：Stage1 标记的 MV 是确定信号（该格确实为空，且 Stage1 已判该列
+    # 非空），不允许 LLM 二次否决。经 rayyan/flights/hospital 多数据集验证：救回真错且
+    # 零新增误报（MV 的精度本就接近 1.0，LLM 对其的否决在实测中均为错判）。
+    if (
+        not is_error
+        and protect_stage1_mv
+        and str(s.prior_error_type).upper() == "MV"
+        and _is_stage1(s)
+    ):
+        is_error = True
+        etype = "MV"
+        llm_reason = (
+            f"[保护] Stage1 确定性缺失值，不被 LLM 否决（该列已判非空）。"
+            f"LLM 原判: {llm_reason or 'NONE'}"
+        )
+        return {
+            "row_id": None,
+            "column": s.column,
+            "value": s.value,
+            "prior_error_type": s.prior_error_type,
+            "prior_source": s.prior_source,
+            "is_error": True,
+            "error_type": etype,
+            "confidence": round(conf, 3),
+            "suggested_fix": fix,
+            "llm_reason": llm_reason,
+        }
 
     # 缺证据保护：来自分布模型(stage2)、且跨行共识证据表明本值与同 key 多数值冲突时，
     # 只有当 LLM 以足够高的把握判其为误报，才允许否决；否则维持为错误（保住召回）。
@@ -117,6 +150,7 @@ def verify_row(
     llm,
     cache: Optional[ResponseCache],
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
+    protect_stage1_mv: bool = True,
 ) -> list[dict]:
     """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。"""
     prompt = build_prompt(ctx)
@@ -131,7 +165,7 @@ def verify_row(
     for s in ctx.suspects:
         judg = by_col.get(s.column)
         norm = (
-            _normalize(judg, s, reject_conf_threshold) if judg
+            _normalize(judg, s, reject_conf_threshold, protect_stage1_mv) if judg
             else _fallback_judgment(s)
         )
         norm["row_id"] = ctx.row_id
@@ -145,12 +179,15 @@ def verify_contexts(
     cache: Optional[ResponseCache] = None,
     progress_every: int = 50,
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
+    protect_stage1_mv: bool = True,
 ) -> list[dict]:
     """遍历所有行上下文，返回扁平的逐格判定列表。"""
     all_results: list[dict] = []
     total = len(contexts)
     for i, ctx in enumerate(contexts, 1):
-        all_results.extend(verify_row(ctx, llm, cache, reject_conf_threshold))
+        all_results.extend(
+            verify_row(ctx, llm, cache, reject_conf_threshold, protect_stage1_mv)
+        )
         if progress_every and (i % progress_every == 0 or i == total):
             print(f"  [stage3] 已处理 {i}/{total} 行")
     return all_results
