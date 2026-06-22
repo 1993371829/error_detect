@@ -115,6 +115,24 @@ class LeakageConfig:
 
 
 @dataclass
+class DupConfig:
+    """重复值检测参数（整值由同一 token 重复拼接，如 'X,X'）。"""
+
+    enabled: bool = True
+    sep: str = ","                   # token 分隔符（列表型字段常用逗号）
+
+
+@dataclass
+class FmtConfig:
+    """主导格式一致性检测参数（格式高度统一的列里，标记偏离主导形态的值，FI/format_outlier）。"""
+
+    enabled: bool = True
+    min_rows: int = 30               # 列非空值最小数（不足则跳过）
+    dom_min: float = 0.97            # 主导形态占比下限（越高越保守）
+    sec_max: float = 0.02            # 次高形态占比上限（排除合法多形态列如 City/src）
+
+
+@dataclass
 class XColConfig:
     """跨列"全名↔标准缩写"一致性检测参数（发现并修复两列对调，借鉴 CFD + LLM 语义校验）。"""
 
@@ -156,6 +174,8 @@ class ExecutionConfig:
     dmv: DMVConfig = field(default_factory=DMVConfig)
     standardize: StandardizeConfig = field(default_factory=StandardizeConfig)
     leakage: LeakageConfig = field(default_factory=LeakageConfig)
+    dup: DupConfig = field(default_factory=DupConfig)
+    fmt: FmtConfig = field(default_factory=FmtConfig)
     xcol: XColConfig = field(default_factory=XColConfig)
     fd: FDConfig = field(default_factory=FDConfig)
 
@@ -228,6 +248,14 @@ class Stage1Config:
                         for lkey, lval in val.items():
                             if hasattr(cfg.execution.leakage, lkey):
                                 setattr(cfg.execution.leakage, lkey, lval)
+                    elif key == "dup" and isinstance(val, dict):
+                        for dkey, dval in val.items():
+                            if hasattr(cfg.execution.dup, dkey):
+                                setattr(cfg.execution.dup, dkey, dval)
+                    elif key == "fmt" and isinstance(val, dict):
+                        for fkey, fval in val.items():
+                            if hasattr(cfg.execution.fmt, fkey):
+                                setattr(cfg.execution.fmt, fkey, fval)
                     elif key == "xcol" and isinstance(val, dict):
                         for xkey, xval in val.items():
                             if hasattr(cfg.execution.xcol, xkey):

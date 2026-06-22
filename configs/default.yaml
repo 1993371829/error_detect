@@ -56,6 +56,16 @@ execution:
     skip_numeric: true             # 跳过数值列（不可能是文献元数据泄漏）
     numeric_min_ratio: 0.8         # 判定数值列的可解析比例
     min_len_ratio: 3.0             # 长度离群门控：仅标记长度 > 列中位长度*该比值的格（0=关闭）
+  # 重复值检测：整值由同一内容重复拼接（如 'X,X'），常见于列表型字段被冗余复制
+  dup:
+    enabled: true
+    sep: ","                       # token 分隔符（列表型字段常用逗号）
+  # 主导格式一致性检测：格式高度统一的列里，标记偏离主导形态的值（FI/format_outlier）
+  fmt:
+    enabled: true
+    min_rows: 30                   # 列非空值最小数（不足则跳过）
+    dom_min: 0.97                  # 主导形态占比下限（越高越保守）
+    sec_max: 0.02                  # 次高形态占比上限（排除 City/src 等合法多形态列）
   # 跨列"全名↔标准缩写"一致性检测：发现并修复两列对调（如期刊全名/缩写互换）
   xcol:
     enabled: true

@@ -21,6 +21,11 @@ import pandas as pd
 from stage_1.profiling import is_blank
 from stage_2.io_utils import read_table
 
+# 高置信确定性结构错误：这类前序判定无需 LLM 复核，直接确认（省 LLM 调用、防误杀）。
+# - duplicate_value：整值由同一 token 重复拼接，Stage1 实测精度 0.99+。
+# - format_outlier：格式高度统一的列里偏离主导形态的值（双门控），实测精度 0.98+。
+AUTO_CONFIRM_RULES = {"duplicate_value", "format_outlier"}
+
 
 @dataclass
 class SuspectCell:
@@ -39,6 +44,7 @@ class SuspectCell:
     verifiability: str = "verifiable"  # verifiable / consensus_only
     consensus: Optional[dict] = None   # 同 key 共识证据（见 _cell_consensus）
     column_stats: Optional[dict] = None  # 该列统计画像（借鉴 Cocoon，供 LLM 基于分布判断）
+    auto_confirm: bool = False         # 高置信确定性结构错误，直通确认不经 LLM
 
     @property
     def consensus_conflict(self) -> bool:
@@ -344,6 +350,8 @@ def build_row_contexts(
         for _, r in group.iterrows():
             col = str(r["column"])
             value = "" if pd.isna(r.get("value")) else str(r.get("value", ""))
+            vr = r.get("violated_rule", "")
+            violated_rule = "" if pd.isna(vr) else str(vr)
             consensus = None
             if col in consensus_map:
                 key_col = consensus_map[col]["key_column"]
@@ -364,6 +372,7 @@ def build_row_contexts(
                 verifiability="consensus_only" if col in consensus_map else "verifiable",
                 consensus=consensus,
                 column_stats=column_stats.get(col),
+                auto_confirm=violated_rule in AUTO_CONFIRM_RULES,
             ))
         contexts.append(RowContext(row_id=int(row_id), row_values=row_values, suspects=suspects))
     return contexts

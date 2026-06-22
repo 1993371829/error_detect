@@ -21,7 +21,9 @@ import pandas as pd
 
 from stage_1.config import Stage1Config
 from stage_1.dmv_detect import detect_dmv
+from stage_1.dup_detect import detect_duplicates
 from stage_1.fd_detect import detect_vad
+from stage_1.fmt_detect import detect_format_outliers
 from stage_1.leakage_detect import detect_leakage
 from stage_1.llm_rules import LLMClient, extract_rules_for_column
 from stage_1.profiling import is_blank, profile_column, save_profiles
@@ -291,6 +293,8 @@ def run_rule_layer(
     _append_dmv_errors(df, config, all_errors, flagged_cells)
     _append_standardization_errors(df, config, all_errors, flagged_cells, standardize_specs)
     _append_leakage_errors(df, config, all_errors, flagged_cells)
+    _append_dup_errors(df, config, all_errors, flagged_cells)
+    _append_fmt_errors(df, config, all_errors, flagged_cells)
     _append_xcol_errors(df, config, all_errors, flagged_cells, llm, cache)
     _append_vad_errors(df, config, all_errors, flagged_cells, rule_report, llm)
 
@@ -419,6 +423,54 @@ def _append_leakage_errors(
             flagged_cells.add(cell)
             added += 1
     print(f"元数据泄漏检测新增 {added} 个候选错误 (FI/metadata_leakage)")
+
+
+def _append_dup_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+) -> None:
+    """运行重复值检测（整值由同一 token 重复拼接），并入 all_errors（交 Stage 3 核验）。"""
+    dc = config.execution.dup
+    if not dc.enabled:
+        return
+    added = 0
+    for col in df.columns:
+        for err in detect_duplicates(df[col], str(col), sep=dc.sep):
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"重复值检测新增 {added} 个候选错误 (FI/duplicate_value)")
+
+
+def _append_fmt_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+) -> None:
+    """运行主导格式一致性检测（偏离列主导形态），并入 all_errors（交 Stage 3 复核）。"""
+    fc = config.execution.fmt
+    if not fc.enabled:
+        return
+    added = 0
+    for col in df.columns:
+        errs = detect_format_outliers(
+            df[col], str(col),
+            min_rows=fc.min_rows, dom_min=fc.dom_min, sec_max=fc.sec_max,
+        )
+        for err in errs:
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            flagged_cells.add(cell)
+            added += 1
+    print(f"主导格式检测新增 {added} 个候选错误 (FI/format_outlier)")
 
 
 def _append_xcol_errors(

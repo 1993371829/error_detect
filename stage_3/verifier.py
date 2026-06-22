@@ -56,6 +56,23 @@ def _is_stage2(s: SuspectCell) -> bool:
     return "stage2" in (s.prior_source or "").lower()
 
 
+def _auto_confirm_judgment(s: SuspectCell) -> dict:
+    """高置信确定性结构错误（如 duplicate_value）直接确认，不经 LLM。"""
+    etype = s.prior_error_type if s.prior_error_type in VALID_TYPES else "FI"
+    return {
+        "row_id": None,
+        "column": s.column,
+        "value": s.value,
+        "prior_error_type": s.prior_error_type,
+        "prior_source": s.prior_source,
+        "is_error": True,
+        "error_type": etype,
+        "confidence": 0.95,
+        "suggested_fix": s.suggested_fix or None,
+        "llm_reason": "[直通] Stage1 确定性结构错误，高置信直接确认（跳过 LLM）。",
+    }
+
+
 def _is_stage1(s: SuspectCell) -> bool:
     return "stage1" in (s.prior_source or "").lower()
 
@@ -152,8 +169,31 @@ def verify_row(
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
     protect_stage1_mv: bool = True,
 ) -> list[dict]:
-    """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。"""
-    prompt = build_prompt(ctx)
+    """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。
+
+    高置信确定性结构错误（auto_confirm）直接确认；若整行可疑格都是此类，
+    则跳过 LLM 调用（省成本、防误杀）。
+    """
+    llm_suspects = [s for s in ctx.suspects if not s.auto_confirm]
+
+    # 纯确定性行：无需 LLM
+    if not llm_suspects:
+        results = []
+        for s in ctx.suspects:
+            norm = _auto_confirm_judgment(s)
+            norm["row_id"] = ctx.row_id
+            results.append(norm)
+        return results
+
+    # prompt 只含需 LLM 判定的可疑格：auto_confirm 格不进 prompt，
+    # 既避免 LLM 多判，又使"混合行"的 prompt 与历史（无确定性错误时）一致、命中缓存。
+    if len(llm_suspects) == len(ctx.suspects):
+        prompt_ctx = ctx
+    else:
+        prompt_ctx = RowContext(
+            row_id=ctx.row_id, row_values=ctx.row_values, suspects=llm_suspects,
+        )
+    prompt = build_prompt(prompt_ctx)
     raw = cache.get(prompt) if cache else None
     if raw is None:
         raw = llm.complete(prompt)
@@ -163,11 +203,14 @@ def verify_row(
     by_col = _parse_response(raw)
     results = []
     for s in ctx.suspects:
-        judg = by_col.get(s.column)
-        norm = (
-            _normalize(judg, s, reject_conf_threshold, protect_stage1_mv) if judg
-            else _fallback_judgment(s)
-        )
+        if s.auto_confirm:
+            norm = _auto_confirm_judgment(s)
+        else:
+            judg = by_col.get(s.column)
+            norm = (
+                _normalize(judg, s, reject_conf_threshold, protect_stage1_mv) if judg
+                else _fallback_judgment(s)
+            )
         norm["row_id"] = ctx.row_id
         results.append(norm)
     return results

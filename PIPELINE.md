@@ -56,6 +56,8 @@ flowchart LR
 | 拼写错误检测 | 基于频次 + 编辑距离，发现低频值与高频锚点的近似拼写（T） |
 | 标准化检测 | LLM 归纳列内规范表示形态，标记不一致取值（FI） |
 | 元数据泄漏检测 | 识别 RIS/MEDLINE/PubMed 标签混入字段值（FI/metadata_leakage），长度离群门控降误报 |
+| 重复值检测 | 识别整值由同一 token 重复拼接（如 `X,X`）的冗余复制（FI/duplicate_value），纯本地、确定性强 |
+| 主导格式检测 | 格式高度统一的列里标记偏离主导形态的值（FI/format_outlier），双门控自动跳过自由文本/合法多形态列 |
 | 跨列对调检测 | 宽松统计发现"全名↔标准缩写"列对，LLM 语义确认后标记两列对调行（FI/column_swap） |
 | 跨列依赖挖掘 | 近似函数依赖（FD）挖掘，发现如 ZipCode → City 的强依赖违反（VAD） |
 | FD 语义校验 | 统计候选 FD 后用 LLM 复核其是否现实语义上成立，仅确认者产出 VAD（借鉴 Cocoon，降伪依赖误报） |
@@ -293,7 +295,9 @@ flowchart TD
     TYPO --> DMV["DMV 检测 dmv_detect.py<br/>伪缺失词表匹配 → DMV<br/>跳过 flagged_cells"]
     DMV --> STD["标准化检测 standardize_detect.py<br/>LLM 归纳规范形态 → FI<br/>跳过 flagged_cells"]
     STD --> LEAK["元数据泄漏 leakage_detect.py<br/>RIS/MEDLINE 标签 → FI<br/>跳过 flagged_cells"]
-    LEAK --> XCOL["跨列对调 xcol_detect.py<br/>统计发现 + LLM 确认列对<br/>→ FI/column_swap<br/>跳过 flagged_cells"]
+    LEAK --> DUP["重复值检测 dup_detect.py<br/>整值同 token 重复 X,X<br/>→ FI/duplicate_value<br/>跳过 flagged_cells"]
+    DUP --> FMT["主导格式检测 fmt_detect.py<br/>双门控 dom/sec<br/>偏离主导形态 → FI/format_outlier<br/>跳过 flagged_cells"]
+    FMT --> XCOL["跨列对调 xcol_detect.py<br/>统计发现 + LLM 确认列对<br/>→ FI/column_swap<br/>跳过 flagged_cells"]
     XCOL --> FD["FD 挖掘 fd_detect.py<br/>近似函数依赖<br/>semantic_check 时 LLM 复核<br/>→ VAD，跳过 flagged_cells"]
     FD --> OUT1["output/stage1/{dataset}_errors.csv"]
     FD --> OUT2["output/stage1/{dataset}_rules.json"]
@@ -325,6 +329,8 @@ flowchart TD
 | `dmv_detect.py` | 伪缺失值词表匹配 → DMV |
 | `standardize_detect.py` | LLM 归纳列内规范表示形态 → FI |
 | `leakage_detect.py` | RIS/MEDLINE/PubMed 元数据泄漏 → FI/metadata_leakage |
+| `dup_detect.py` | 重复值检测（整值由同一 token 重复拼接）→ FI/duplicate_value |
+| `fmt_detect.py` | 主导格式一致性检测（双门控 dom_min/sec_max，偏离主导形态）→ FI/format_outlier |
 | `xcol_detect.py` | 跨列"全名↔标准缩写"对调检测（统计发现 + LLM 语义确认）→ FI/column_swap |
 | `fd_detect.py` | 近似 FD 挖掘 + LLM 语义校验 → VAD |
 
@@ -422,7 +428,12 @@ flowchart TD
     CACHE3 -->|否| LLM3["LLMClient.complete<br/>cache/stage3_cache.json"]
     LLM3 --> RAW
 
-    RAW --> PARSE["_parse_response → judgments"]
+    ROW_LOOP --> AUTOC{整行全为<br/>auto_confirm?<br/>duplicate_value 等}
+    AUTOC -->|是| ACONF["直通确认<br/>跳过 LLM，conf=0.95"]
+    AUTOC -->|否| PROMPT
+    ACONF --> PROP
+
+    RAW --> PARSE["_parse_response → judgments<br/>（prompt 排除 auto_confirm 格<br/>→ 命中历史缓存）"]
     PARSE --> NORM["逐可疑格 _normalize<br/>is_error / error_type / confidence<br/>suggested_fix / reason"]
     NORM --> MVPROT{Stage1-MV 保护?<br/>prior=MV & source=stage1<br/>LLM 判 NONE → 维持错误}
     MVPROT --> CONSENSUS{Stage2 共识冲突?<br/>LLM 低把握否决 → 驳回}
@@ -449,10 +460,15 @@ flowchart TD
 
 | 保护 | 触发条件 | 行为 | 配置 |
 |------|---------|------|------|
+| **确定性结构错误直通** | `violated_rule ∈ AUTO_CONFIRM_RULES`（`duplicate_value` / `format_outlier`） | 直接确认为错误（conf=0.95），不进 LLM；整行皆此类则跳过 LLM 调用 | `stage_3/context.py: AUTO_CONFIRM_RULES` |
 | **确定性 MV 保护** | `prior_source=stage1` 且 `prior_error_type=MV`，LLM 判 `NONE` | 维持为错误，不因 LLM 高置信否决而丢弃 | `protect_stage1_mv=true`（默认）；`--no-protect-mv` 关闭 |
 | **共识冲突保护** | `prior_source=stage2` 且 `consensus_conflict=true`，LLM 低把握（<0.85）判 `NONE` | 维持为错误，补 `suggested_fix=majority_value` | `reject_conf_threshold=0.85` |
 
 **多数据集验证（MV 保护）：** rayyan F1 +0.013 / hospital F1 +0.022 / flights F1 +0.001 / beers 不变，**零精度退化**。
+
+**重复值 + 主导格式检测 + 直通确认验证：** movies 端到端 F1 **0.652 → 0.746**（召回 0.491 → 0.603，精度 0.970 → 0.976，+700 TP）；其中重复值检测贡献 F1 0.652→0.717、主导格式检测再贡献 →0.746。rayyan 不退化（+5 dup TP，F1 0.734）；billionaire F1 -0.0006（可忽略，fmt 仅引入 9 个枚举列边缘 FP）；hospital/beers/flights 零标记零影响。`duplicate_value` / `format_outlier` 候选 100% 留存、不被 LLM 误杀，纯确定性行跳过 LLM 调用。
+
+> 主导格式检测的双门控（`dom_min` 主导形态占比 + `sec_max` 次形态占比）会自动跳过 `Description` 等自由文本列与 `City`/`src` 等合法多形态列；对低基数枚举列（如 billionaire `Company Type`）无法靠纯形态统计完美排除，但实测影响可忽略，必要时可调高 `dom_min`（0.98）权衡。
 
 ### Stage 3 关键模块
 
