@@ -12,3 +12,7 @@ python-dotenv>=1.0
 # Stage 2 auto-detects GPU by default (model.device="auto"); override via: --device cuda|cpu
 torch>=2.0
 numpy>=1.23
+
+# Stage 2 multi-detector framework (statistical / categorical / neighbor / clustering / isolation-forest)
+scikit-learn>=1.2
+rapidfuzz>=3.0

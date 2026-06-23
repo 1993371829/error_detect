@@ -26,18 +26,6 @@ execution:
     top5_coverage_structured_min: 0.5
     distinct_pattern_structured_max: 30
     dominant_pattern_rate_min: 0.7
-  # Typo 候选检测（频次 + 编辑距离），用于发现文本/类别列拼写错误（T）
-  typo:
-    enabled: true
-    max_unique: 300                # 列唯一值超过此数视为高基数 id，跳过
-    min_anchor_count: 3            # 锚点(正确形态)的最小出现次数
-    rare_max_count: 2              # 候选(疑似 typo)的最大出现次数
-    anchor_ratio_min: 5.0          # 锚点频次 / 候选频次 的最小比值
-    max_abs_distance: 2            # 最大编辑距离
-    max_norm_distance: 0.34        # 编辑距离 / 锚点长度 的上限
-    min_anchor_len: 2              # 锚点最小长度
-    skip_numeric: true             # 跳过数值列（typo 由 FI/VAD 覆盖）
-    numeric_min_ratio: 0.8         # 判定数值列的可解析比例
   # 伪缺失值检测（DMV）：识别非空但语义为缺失的占位值（?/unknown/missing/...）
   dmv:
     enabled: true
@@ -60,12 +48,6 @@ execution:
   dup:
     enabled: true
     sep: ","                       # token 分隔符（列表型字段常用逗号）
-  # 主导格式一致性检测：格式高度统一的列里，标记偏离主导形态的值（FI/format_outlier）
-  fmt:
-    enabled: true
-    min_rows: 30                   # 列非空值最小数（不足则跳过）
-    dom_min: 0.97                  # 主导形态占比下限（越高越保守）
-    sec_max: 0.02                  # 次高形态占比上限（排除 City/src 等合法多形态列）
   # 跨列"全名↔标准缩写"一致性检测：发现并修复两列对调（如期刊全名/缩写互换）
   xcol:
     enabled: true
@@ -74,18 +56,14 @@ execution:
     min_multi_token_rate: 0.5      # abbrev 列多 token 行占比下限（排除单码列）
     min_abbrev_rate: 0.55          # 多数行 abbrev 为 full 严格缩写的占比下限（宽松发现）
     semantic_check: true           # 用 LLM 确认列对确为"全名↔缩写"关系（过滤伪对）
-  # 近似函数依赖挖掘，用于发现跨列依赖违反（VAD）
-  fd:
+  # 极端统计兜底（高精度）：数值/日期列 Robust-Z(>6) + IQR(k=4.5) 双判据，只捞确凿极端值；
+  # 温和离群交由 Stage 2 统计/近邻等多检测器 + 证据融合处理。
+  statistic_extreme:
     enabled: true
-    min_confidence: 0.9            # FD 全局一致率下限
-    min_group_support: 5           # 参与违反判定的 A 组最小样本量
-    min_group_confidence: 0.9      # A 组内主导值占比下限
-    pure_threshold: 0.9            # "纯组"的主导占比门槛
-    min_pure_group_ratio: 0.85     # 纯组比例下限（区分真依赖 vs 软相关）
-    min_distinct_dependents: 2     # 不同主导值数下限（防类别不平衡假依赖）
-    max_determinant_unique_ratio: 0.5  # 决定列唯一率上限（过高跳过）
-    min_dependent_unique: 2        # 依赖列最少唯一值
-    semantic_check: true           # 统计候选 FD 后用 LLM 做语义校验（借鉴 Cocoon）
+    robust_z: 6.0                  # Robust-Z 阈值（远高于 Stage 2 的 3.0）
+    iqr_k: 4.5                     # IQR 系数（越大越保守）
+    detect_dates: true            # 对可解析日期列检测过早/未来等离群日期
+  # 注：Typo / 主导格式(format_outlier) / 近似函数依赖(FD) 已迁移至 Stage 2 多检测器层。
 
 # 目录布局：data/ 仅原始数据；生成物写入 output/ 子目录
 layout:

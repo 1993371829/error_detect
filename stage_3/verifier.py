@@ -48,6 +48,8 @@ def _fallback_judgment(s: SuspectCell) -> dict:
         "error_type": etype,
         "confidence": 0.5,
         "suggested_fix": s.suggested_fix or None,
+        "fix_source": "prior" if s.suggested_fix else "",
+        "fix_confidence": 0.5,
         "llm_reason": "LLM 未返回该格判定，沿用前序结果（兜底）。",
     }
 
@@ -69,6 +71,8 @@ def _auto_confirm_judgment(s: SuspectCell) -> dict:
         "error_type": etype,
         "confidence": 0.95,
         "suggested_fix": s.suggested_fix or None,
+        "fix_source": "prior_rule" if s.suggested_fix else "",
+        "fix_confidence": 0.95,
         "llm_reason": "[直通] Stage1 确定性结构错误，高置信直接确认（跳过 LLM）。",
     }
 
@@ -99,6 +103,7 @@ def _normalize(
     conf = max(0.0, min(1.0, conf))
     fix = judg.get("suggested_fix")
     fix = None if fix in (None, "", "null") else str(fix)
+    fix_source = "llm" if fix else ""
     llm_reason = str(judg.get("reason", "") or "")
 
     # 确定性缺失值保护：Stage1 标记的 MV 是确定信号（该格确实为空，且 Stage1 已判该列
@@ -126,6 +131,8 @@ def _normalize(
             "error_type": etype,
             "confidence": round(conf, 3),
             "suggested_fix": fix,
+            "fix_source": fix_source,
+            "fix_confidence": round(conf, 3),
             "llm_reason": llm_reason,
         }
 
@@ -141,6 +148,8 @@ def _normalize(
         etype = "VAD" if s.column != s.consensus.get("key_column") else "OTHER"
         if fix is None:
             fix = s.consensus.get("majority_value") or (s.suggested_fix or None)
+            if fix:
+                fix_source = "consensus"
         llm_reason = (
             f"[保护] LLM 以低把握({conf:.2f}<{reject_conf_threshold})判 NONE，"
             f"但同 {s.consensus.get('key_column')} 多数值="
@@ -158,6 +167,8 @@ def _normalize(
         "error_type": etype,
         "confidence": round(conf, 3),
         "suggested_fix": fix,
+        "fix_source": fix_source,
+        "fix_confidence": round(conf, 3),
         "llm_reason": llm_reason,
     }
 
@@ -271,6 +282,8 @@ def propagate_fix_mappings(results: list[dict]) -> list[dict]:
         mapped = best_fix.get(key)
         if mapped is not None:
             r["suggested_fix"] = mapped[0]
+            if not r.get("fix_source"):
+                r["fix_source"] = "propagated"
             filled += 1
     if filled:
         print(f"修复映射复用：为 {filled} 个同列同值单元格补全 suggested_fix")

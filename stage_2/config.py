@@ -55,6 +55,44 @@ class ScoringConfig:
     min_predictability: float = 0.5
     abs_prob_floor: float = 0.02
     max_cells_per_row: int = 0
+    # 掩码推理：预测时把 Stage 1 确认脏的单元格作上下文中性化（隔离脏上下文传播）
+    masked_inference: bool = False
+    # 迭代轮数：>1 时每轮把上一轮 Stage 2 候选并入脏集再中性化重打分（松绑同行互相掩护）
+    masked_inference_iters: int = 1
+    # CDF 归一化：输出 norm_score 为分数在干净分布上的累积分位（跨列可比）
+    cdf_normalize: bool = False
+    # 词表去污：训练前用编辑距离自过滤剔除混入类别词表的漏报 typo
+    vocab_denoise: bool = False
+    vocab_denoise_ratio: float = 0.05
+
+
+@dataclass
+class DetectorConfig:
+    """Stage 2 多检测器开关与关键阈值（文档 §7-§14）。
+
+    默认启用核心高召回检测器（reconstruction/statistical/categorical/neighbor/fd），
+    与文档"多检测器 + 证据融合"主线对齐；association/clustering 误报较高，默认关闭，
+    可通过 --all-detectors 或 --detectors 选择启用。
+    """
+
+    reconstruction: bool = True
+    statistical: bool = True
+    categorical: bool = True
+    association: bool = False
+    neighbor: bool = True
+    clustering: bool = False
+    fd: bool = True
+    # 关键阈值
+    robust_z: float = 3.0
+    iqr_k: float = 1.5
+    knn_k: int = 10
+    sim_threshold: float = 0.85
+    assoc_min_confidence: float = 0.98
+
+    def enabled(self) -> list[str]:
+        names = ["reconstruction", "statistical", "categorical",
+                 "association", "neighbor", "clustering", "fd"]
+        return [n for n in names if getattr(self, n)]
 
 
 @dataclass
@@ -77,6 +115,7 @@ class Stage2Config:
     encoding: EncodingConfig = field(default_factory=EncodingConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
+    detectors: DetectorConfig = field(default_factory=DetectorConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
 
     def model_kwargs(self) -> dict:

@@ -22,8 +22,6 @@ import pandas as pd
 from stage_1.config import Stage1Config
 from stage_1.dmv_detect import detect_dmv
 from stage_1.dup_detect import detect_duplicates
-from stage_1.fd_detect import detect_vad
-from stage_1.fmt_detect import detect_format_outliers
 from stage_1.leakage_detect import detect_leakage
 from stage_1.llm_rules import LLMClient, extract_rules_for_column
 from stage_1.profiling import is_blank, profile_column, save_profiles
@@ -36,7 +34,6 @@ from stage_1.standardize_detect import (
     extract_canonicalization_spec,
     top_value_samples,
 )
-from stage_1.typo_detect import detect_typos
 from stage_1.xcol_detect import (
     build_xcol_profile,
     detect_swaps,
@@ -196,6 +193,7 @@ def run_rule_layer(
     rule_report = []
     profiles = []
     standardize_specs: dict = {}  # col -> LLM 标准化规格（供后续不一致检测）
+    semantic_types: dict = {}     # col -> semantic_type（供硬范围规则使用）
     max_violation_rate = config.execution.max_violation_rate
     max_samples = config.profiling.max_samples
 
@@ -230,6 +228,7 @@ def run_rule_layer(
         compiled = [compiler.compile(r) for r in exec_rules]
         kept = filter_bad_rules(df, col, compiled, exec_rules, max_violation_rate)
 
+        semantic_types[col] = rule_spec.get("semantic_type", "")
         rule_report.append(
             build_report_entry(
                 col,
@@ -287,55 +286,22 @@ def run_rule_layer(
         print(f"\n列画像已写入: {path}")
         return pd.DataFrame(all_errors), rule_report
 
-    # 按 Cocoon 的处理顺序：字符级(T/DMV) -> 列级不一致表示(FI) -> 跨列(VAD)
-    # 列级格式/类型(FI) 已在上面的逐列循环中处理。
-    _append_typo_errors(df, config, all_errors, flagged_cells)
+    # Stage 1 仅保留高精度规则/确定性检测；Typo/主导格式/FD 已迁移至 Stage 2 多检测器层。
+    # 处理顺序：字符级(DMV) -> 列级不一致表示(FI) -> 确定性跨列/范围 -> 极端统计兜底。
     _append_dmv_errors(df, config, all_errors, flagged_cells)
     _append_standardization_errors(df, config, all_errors, flagged_cells, standardize_specs)
     _append_leakage_errors(df, config, all_errors, flagged_cells)
     _append_dup_errors(df, config, all_errors, flagged_cells)
-    _append_fmt_errors(df, config, all_errors, flagged_cells)
+    _append_range_errors(df, config, all_errors, flagged_cells, semantic_types)
+    _append_iforest_errors(df, config, all_errors, flagged_cells)
     _append_xcol_errors(df, config, all_errors, flagged_cells, llm, cache)
-    _append_vad_errors(df, config, all_errors, flagged_cells, rule_report, llm)
+    _append_arith_errors(df, config, all_errors, flagged_cells, llm)
+    _append_statistical_extreme_errors(df, config, all_errors, flagged_cells, semantic_types)
 
     errors_df = pd.DataFrame(all_errors)
     if not errors_df.empty:
         errors_df = errors_df.reindex(columns=ERROR_COLUMNS)
     return errors_df, rule_report
-
-
-def _append_typo_errors(
-    df: pd.DataFrame,
-    config: Stage1Config,
-    all_errors: list,
-    flagged_cells: set,
-) -> None:
-    """运行 Typo 检测并将未被规则层覆盖的单元格并入 all_errors。"""
-    tc = config.execution.typo
-    if not tc.enabled:
-        return
-    added = 0
-    for col in df.columns:
-        typo_errors = detect_typos(
-            df[col], str(col),
-            max_unique=tc.max_unique,
-            min_anchor_count=tc.min_anchor_count,
-            rare_max_count=tc.rare_max_count,
-            anchor_ratio_min=tc.anchor_ratio_min,
-            max_abs_distance=tc.max_abs_distance,
-            max_norm_distance=tc.max_norm_distance,
-            min_anchor_len=tc.min_anchor_len,
-            skip_numeric=tc.skip_numeric,
-            numeric_min_ratio=tc.numeric_min_ratio,
-        )
-        for err in typo_errors:
-            cell = (err["row_id"], err["column"])
-            if cell in flagged_cells:
-                continue
-            all_errors.append(err)
-            flagged_cells.add(cell)
-            added += 1
-    print(f"Typo 检测新增 {added} 个候选错误 (T)")
 
 
 def _append_dmv_errors(
@@ -447,30 +413,128 @@ def _append_dup_errors(
     print(f"重复值检测新增 {added} 个候选错误 (FI/duplicate_value)")
 
 
-def _append_fmt_errors(
+def _append_statistical_extreme_errors(
     df: pd.DataFrame,
     config: Stage1Config,
     all_errors: list,
     flagged_cells: set,
+    semantic_types: dict,
 ) -> None:
-    """运行主导格式一致性检测（偏离列主导形态），并入 all_errors（交 Stage 3 复核）。"""
-    fc = config.execution.fmt
-    if not fc.enabled:
+    """
+    极端统计兜底（高精度）：数值/日期列用 Robust-Z(>6) + IQR(k=4.5) 双判据标记极端离群值。
+
+    阈值远高于 Stage 2 统计检测器（z>3），只捞确凿的极端值，作为 Stage 1 的确定性补充；
+    温和离群交由 Stage 2 多检测器 + 证据融合处理。
+    """
+    sc = config.execution.statistic_extreme
+    if not sc.enabled:
         return
+    from stage_2.coltypes import infer_column_kinds
+    from stage_2.detectors.base import DetectorContext
+    from stage_2.detectors.statistical import detect_statistical
+
+    kinds = infer_column_kinds(df)
+    ctx = DetectorContext(kinds=kinds, semantic_types=semantic_types or {})
+    cands = detect_statistical(
+        df, None, ctx,
+        robust_z=sc.robust_z, iqr_k=sc.iqr_k, detect_dates=sc.detect_dates,
+    )
+    added = 0
+    for cand in cands:
+        cell = (cand.row_id, cand.column)
+        if cell in flagged_cells:
+            continue
+        all_errors.append({
+            "row_id": cand.row_id,
+            "column": cand.column,
+            "value": cand.value,
+            "error_type": "FI",
+            "violated_rule": "extreme_outlier",
+            "reason": cand.evidence,
+        })
+        flagged_cells.add(cell)
+        added += 1
+    print(f"极端统计检测新增 {added} 个候选错误 (FI/extreme_outlier)")
+
+
+def _append_range_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    semantic_types: dict,
+) -> None:
+    """基于 semantic_type 的硬范围规则（age/percentage/price/lat/lon 等）。"""
+    rc = config.execution.range_check
+    if not rc.enabled:
+        return
+    from stage_1.range_detect import detect_range_errors
     added = 0
     for col in df.columns:
-        errs = detect_format_outliers(
-            df[col], str(col),
-            min_rows=fc.min_rows, dom_min=fc.dom_min, sec_max=fc.sec_max,
-        )
-        for err in errs:
+        for err in detect_range_errors(
+            df[col], str(col), semantic_types.get(col, ""),
+            numeric_min_ratio=rc.numeric_min_ratio,
+        ):
             cell = (err["row_id"], err["column"])
             if cell in flagged_cells:
                 continue
             all_errors.append(err)
             flagged_cells.add(cell)
             added += 1
-    print(f"主导格式检测新增 {added} 个候选错误 (FI/format_outlier)")
+    print(f"硬范围检测新增 {added} 个候选错误 (FI/range_error)")
+
+
+def _append_iforest_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+) -> None:
+    """数值列联合孤立森林极端值检测（默认关闭）。"""
+    ic = config.execution.iforest
+    if not ic.enabled:
+        return
+    from stage_1.iforest_detect import detect_iforest_outliers
+    added = 0
+    for err in detect_iforest_outliers(
+        df, top_quantile=ic.top_quantile, min_numeric_cols=ic.min_numeric_cols,
+    ):
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        all_errors.append(err)
+        flagged_cells.add(cell)
+        added += 1
+    print(f"孤立森林检测新增 {added} 个候选错误 (FI/extreme_outlier)")
+
+
+def _append_arith_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    llm=None,
+) -> None:
+    """LLM 跨列算术规则（AST 安全求值 + 验证；默认关闭）。"""
+    ac = config.execution.arith
+    if not ac.enabled or llm is None:
+        return
+    from stage_1.arith_rules import generate_arithmetic_rules, validate_and_apply
+    rules = generate_arithmetic_rules(llm, df)
+    if not rules:
+        print("跨列算术规则：LLM 未归纳出可用规则，跳过")
+        return
+    added = 0
+    for err in validate_and_apply(
+        df, rules, min_support=ac.min_support, max_violation_rate=ac.max_violation_rate,
+    ):
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        all_errors.append(err)
+        flagged_cells.add(cell)
+        added += 1
+    print(f"跨列算术规则新增 {added} 个候选错误 (FI/arithmetic_constraint)")
 
 
 def _append_xcol_errors(
@@ -522,57 +586,6 @@ def _append_xcol_errors(
             flagged_cells.add(cell)
             added += 1
     print(f"跨列对调检测新增 {added} 个候选错误 (FI/column_swap)")
-
-
-def _append_vad_errors(
-    df: pd.DataFrame,
-    config: Stage1Config,
-    all_errors: list,
-    flagged_cells: set,
-    rule_report: list,
-    llm: Optional[LLMClient] = None,
-) -> None:
-    """运行 FD 挖掘并将违反依赖的单元格并入 all_errors。"""
-    fc = config.execution.fd
-    if not fc.enabled:
-        return
-    vad_errors, fds = detect_vad(
-        df,
-        min_confidence=fc.min_confidence,
-        min_group_support=fc.min_group_support,
-        min_group_confidence=fc.min_group_confidence,
-        pure_threshold=fc.pure_threshold,
-        min_pure_group_ratio=fc.min_pure_group_ratio,
-        min_distinct_dependents=fc.min_distinct_dependents,
-        max_determinant_unique_ratio=fc.max_determinant_unique_ratio,
-        min_dependent_unique=fc.min_dependent_unique,
-        llm=llm,
-        semantic_check=fc.semantic_check,
-    )
-    added = 0
-    for err in vad_errors:
-        cell = (err["row_id"], err["column"])
-        if cell in flagged_cells:
-            continue
-        all_errors.append(err)
-        flagged_cells.add(cell)
-        added += 1
-    if fds:
-        rule_report.append({
-            "discovered_fds": [
-                {
-                    "determinant": fd.determinant,
-                    "dependent": fd.dependent,
-                    "confidence": round(fd.confidence, 3),
-                    "groups": len(fd.mapping),
-                    "semantic_reason": fd.semantic_reason,
-                }
-                for fd in fds
-            ]
-        })
-        print(f"发现 {len(fds)} 条近似函数依赖, VAD 检测新增 {added} 个错误")
-    else:
-        print("未发现满足阈值的函数依赖, 跳过 VAD")
 
 
 def build_clean_mask(df: pd.DataFrame, errors_df: pd.DataFrame) -> pd.DataFrame:

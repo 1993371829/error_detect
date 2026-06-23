@@ -15,9 +15,61 @@ from pathlib import Path
 
 import pandas as pd
 
+from stage_1.profiling import is_blank
 from stage_2.io_utils import read_table
 from stage_2.evaluate import ground_truth_cells, cells_from, metrics
 from stage_3.config import Stage3Config
+
+
+def _norm(v) -> str:
+    return "" if is_blank(v) else str(v)
+
+
+def correction_report(final: pd.DataFrame, clean: pd.DataFrame, gt: set) -> None:
+    """修复准确率：对确认为错且属于 GT 的格，比较 suggested_fix 与 clean 真值。"""
+    if final is None or final.empty or "suggested_fix" not in final.columns:
+        return
+    total_fix = correct = tp_with_fix = 0
+    for _, r in final.iterrows():
+        try:
+            row_id = int(r["row_id"])
+        except (TypeError, ValueError):
+            continue
+        col = str(r["column"])
+        if (row_id, col) not in gt:
+            continue
+        fix = r.get("suggested_fix")
+        if fix in (None, "") or (isinstance(fix, float) and pd.isna(fix)):
+            continue
+        if row_id >= len(clean) or col not in clean.columns:
+            continue
+        tp_with_fix += 1
+        total_fix += 1
+        if _norm(fix) == _norm(clean.iloc[row_id][col]):
+            correct += 1
+    if total_fix:
+        print(f"\n修复准确率(correction-level): {correct}/{total_fix} = "
+              f"{correct / total_fix:.3f}（仅统计 TP 且给出修复值的格）")
+
+
+def by_error_type_report(final: pd.DataFrame, gt: set) -> None:
+    """按 error_type 分项：每类确认数 / TP / FP / 精度。"""
+    if final is None or final.empty or "error_type" not in final.columns:
+        return
+    print("\n按 error_type 分项（确认错误）:")
+    print(f"  {'type':8s} {'确认':>5s} {'TP':>5s} {'FP':>5s} {'precision':>9s}")
+    cells_type: dict = {}
+    for _, r in final.iterrows():
+        try:
+            cell = (int(r["row_id"]), str(r["column"]))
+        except (TypeError, ValueError):
+            continue
+        cells_type.setdefault(str(r.get("error_type", "") or "?"), []).append(cell)
+    for etype, cells in sorted(cells_type.items(), key=lambda kv: -len(kv[1])):
+        tp = sum(1 for c in cells if c in gt)
+        fp = len(cells) - tp
+        prec = tp / len(cells) if cells else 0.0
+        print(f"  {etype:8s} {len(cells):5d} {tp:5d} {fp:5d} {prec:9.3f}")
 
 
 def _report(name: str, cells: set, gt: set) -> dict:
@@ -60,9 +112,12 @@ def main(argv: list[str] | None = None) -> None:
         before = _report("精检前(合并候选)", cells_from(cand), gt)
 
     after = None
+    final = None
     if Path(final_path).exists():
         final = read_table(final_path)
         after = _report("精检后(最终确认)", cells_from(final), gt)
+        correction_report(final, clean, gt)
+        by_error_type_report(final, gt)
 
     if before and after:
         print("\n变化:")

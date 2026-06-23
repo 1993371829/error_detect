@@ -34,9 +34,13 @@ from stage_3.verifier import propagate_fix_mappings, verify_contexts
 
 RESULT_COLUMNS = [
     "row_id", "column", "value", "prior_error_type", "prior_source",
-    "is_error", "error_type", "confidence", "suggested_fix", "llm_reason",
+    "is_error", "error_type", "confidence", "suggested_fix",
+    "fix_source", "fix_confidence", "llm_reason",
 ]
-FINAL_COLUMNS = ["row_id", "column", "error_type", "confidence", "suggested_fix"]
+FINAL_COLUMNS = [
+    "row_id", "column", "error_type", "confidence", "suggested_fix",
+    "fix_source", "fix_confidence",
+]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="组内占比相对全局基准的最小提升，排除类别不平衡伪共识（默认 0.15）")
     p.add_argument("--no-protect-mv", action="store_true",
                    help="关闭 Stage1 缺失值保护（默认开启，不允许 LLM 否决确定性 MV）")
+    p.add_argument("--min-tier", default=None, choices=["low", "mid", "high"],
+                   help="仅精检置信度分层 >= 该层级的候选（默认 low=全部）")
     return p
 
 
@@ -96,6 +102,8 @@ def main(argv: list[str] | None = None) -> None:
         cfg.min_lift = args.min_lift
     if args.no_protect_mv:
         cfg.protect_stage1_mv = False
+    if args.min_tier is not None:
+        cfg.min_tier = args.min_tier
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
@@ -103,6 +111,7 @@ def main(argv: list[str] | None = None) -> None:
         min_avg_group=cfg.min_avg_group,
         min_dominance=cfg.min_dominance,
         min_lift=cfg.min_lift,
+        min_tier=cfg.min_tier,
     )
     if cfg.limit and cfg.limit > 0:
         contexts = contexts[:cfg.limit]

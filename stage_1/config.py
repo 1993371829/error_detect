@@ -69,22 +69,6 @@ class GuardConfig:
 
 
 @dataclass
-class TypoConfig:
-    """类别/文本列 Typo 候选检测参数（基于频次 + 编辑距离）。"""
-
-    enabled: bool = True
-    max_unique: int = 300            # 列唯一值超过此数视为高基数 id，跳过
-    min_anchor_count: int = 3        # 锚点(正确形态)的最小出现次数
-    rare_max_count: int = 2          # 候选(疑似 typo)的最大出现次数
-    anchor_ratio_min: float = 5.0    # 锚点频次 / 候选频次 的最小比值
-    max_abs_distance: int = 2        # 最大编辑距离
-    max_norm_distance: float = 0.34  # 编辑距离 / 锚点长度 的上限
-    min_anchor_len: int = 2          # 锚点最小长度，过短不可靠
-    skip_numeric: bool = True        # 跳过数值列（typo 由 FI/VAD 覆盖）
-    numeric_min_ratio: float = 0.8   # 判定数值列的可解析比例
-
-
-@dataclass
 class DMVConfig:
     """伪缺失值（Disguised Missing Value）检测参数（借鉴 Cocoon）。"""
 
@@ -123,16 +107,6 @@ class DupConfig:
 
 
 @dataclass
-class FmtConfig:
-    """主导格式一致性检测参数（格式高度统一的列里，标记偏离主导形态的值，FI/format_outlier）。"""
-
-    enabled: bool = True
-    min_rows: int = 30               # 列非空值最小数（不足则跳过）
-    dom_min: float = 0.97            # 主导形态占比下限（越高越保守）
-    sec_max: float = 0.02            # 次高形态占比上限（排除合法多形态列如 City/src）
-
-
-@dataclass
 class XColConfig:
     """跨列"全名↔标准缩写"一致性检测参数（发现并修复两列对调，借鉴 CFD + LLM 语义校验）。"""
 
@@ -145,19 +119,39 @@ class XColConfig:
 
 
 @dataclass
-class FDConfig:
-    """近似函数依赖挖掘参数（用于检测 VAD）。"""
+class RangeConfig:
+    """基于 semantic_type 的硬范围规则（age/percentage/price/lat/lon 等）。"""
 
     enabled: bool = True
-    min_confidence: float = 0.9              # FD 全局一致率下限
-    min_group_support: int = 5               # 参与违反判定的 A 组最小样本量
-    min_group_confidence: float = 0.9        # A 组内主导值占比下限
-    pure_threshold: float = 0.9              # "纯组"的主导占比门槛
-    min_pure_group_ratio: float = 0.85       # 纯组比例下限（区分真依赖 vs 软相关）
-    min_distinct_dependents: int = 2         # 不同主导值数下限（防类别不平衡假依赖）
-    max_determinant_unique_ratio: float = 0.5  # 决定列唯一率上限（过高跳过）
-    min_dependent_unique: int = 2            # 依赖列最少唯一值（排除常量列）
-    semantic_check: bool = True              # 统计候选 FD 后用 LLM 做语义校验（借鉴 Cocoon）
+    numeric_min_ratio: float = 0.8
+
+
+@dataclass
+class IForestConfig:
+    """数值列联合孤立森林极端值检测（高精度 top 分位）。默认关闭。"""
+
+    enabled: bool = False
+    top_quantile: float = 0.995
+    min_numeric_cols: int = 2
+
+
+@dataclass
+class ArithConfig:
+    """LLM 跨列算术/约束规则（AST 安全求值 + 支持度/违反率验证）。默认关闭。"""
+
+    enabled: bool = False
+    min_support: int = 30
+    max_violation_rate: float = 0.02
+
+
+@dataclass
+class StatExtremeConfig:
+    """极端统计兜底检测（高精度）：数值/日期列 Robust-Z(>6) + IQR(k=4.5) 双判据。"""
+
+    enabled: bool = True
+    robust_z: float = 6.0            # Robust-Z 阈值（远高于 Stage 2 的 3.0，只捞极端值）
+    iqr_k: float = 4.5               # IQR 系数（越大越保守）
+    detect_dates: bool = True        # 是否对可解析日期列检测过早/未来等离群日期
 
 
 @dataclass
@@ -170,14 +164,15 @@ class ExecutionConfig:
     infer_nullable_min_rate: float = 0.5  # infer_nullable 生效时的空值率下限
     enable_type_check: bool = True  # 启用列逻辑类型一致性校验（bool/int/float/date，借鉴 Cocoon）
     guard: GuardConfig = field(default_factory=GuardConfig)
-    typo: TypoConfig = field(default_factory=TypoConfig)
     dmv: DMVConfig = field(default_factory=DMVConfig)
     standardize: StandardizeConfig = field(default_factory=StandardizeConfig)
     leakage: LeakageConfig = field(default_factory=LeakageConfig)
     dup: DupConfig = field(default_factory=DupConfig)
-    fmt: FmtConfig = field(default_factory=FmtConfig)
     xcol: XColConfig = field(default_factory=XColConfig)
-    fd: FDConfig = field(default_factory=FDConfig)
+    range_check: RangeConfig = field(default_factory=RangeConfig)
+    iforest: IForestConfig = field(default_factory=IForestConfig)
+    arith: ArithConfig = field(default_factory=ArithConfig)
+    statistic_extreme: StatExtremeConfig = field(default_factory=StatExtremeConfig)
 
 
 _DEFAULT_DP = default_dataset_paths()
@@ -232,10 +227,6 @@ class Stage1Config:
                         for gkey, gval in val.items():
                             if hasattr(cfg.execution.guard, gkey):
                                 setattr(cfg.execution.guard, gkey, gval)
-                    elif key == "typo" and isinstance(val, dict):
-                        for tkey, tval in val.items():
-                            if hasattr(cfg.execution.typo, tkey):
-                                setattr(cfg.execution.typo, tkey, tval)
                     elif key == "dmv" and isinstance(val, dict):
                         for dkey, dval in val.items():
                             if hasattr(cfg.execution.dmv, dkey):
@@ -252,18 +243,26 @@ class Stage1Config:
                         for dkey, dval in val.items():
                             if hasattr(cfg.execution.dup, dkey):
                                 setattr(cfg.execution.dup, dkey, dval)
-                    elif key == "fmt" and isinstance(val, dict):
-                        for fkey, fval in val.items():
-                            if hasattr(cfg.execution.fmt, fkey):
-                                setattr(cfg.execution.fmt, fkey, fval)
                     elif key == "xcol" and isinstance(val, dict):
                         for xkey, xval in val.items():
                             if hasattr(cfg.execution.xcol, xkey):
                                 setattr(cfg.execution.xcol, xkey, xval)
-                    elif key == "fd" and isinstance(val, dict):
-                        for fkey, fval in val.items():
-                            if hasattr(cfg.execution.fd, fkey):
-                                setattr(cfg.execution.fd, fkey, fval)
+                    elif key == "range_check" and isinstance(val, dict):
+                        for rkey, rval in val.items():
+                            if hasattr(cfg.execution.range_check, rkey):
+                                setattr(cfg.execution.range_check, rkey, rval)
+                    elif key == "iforest" and isinstance(val, dict):
+                        for ikey, ival in val.items():
+                            if hasattr(cfg.execution.iforest, ikey):
+                                setattr(cfg.execution.iforest, ikey, ival)
+                    elif key == "arith" and isinstance(val, dict):
+                        for akey, aval in val.items():
+                            if hasattr(cfg.execution.arith, akey):
+                                setattr(cfg.execution.arith, akey, aval)
+                    elif key == "statistic_extreme" and isinstance(val, dict):
+                        for skey, sval in val.items():
+                            if hasattr(cfg.execution.statistic_extreme, skey):
+                                setattr(cfg.execution.statistic_extreme, skey, sval)
                     elif hasattr(cfg.execution, key):
                         setattr(cfg.execution, key, val)
         if paths := data.get("paths"):

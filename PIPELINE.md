@@ -22,14 +22,23 @@
 
 | 层级 | 名称 | 检测范式 | 核心目标 |
 |------|------|----------|----------|
-| Stage 1 | 规则层 | 显式规则 + 统计 + LLM 辅助归纳 | 高精度检出**可写成规则**的明确错误 |
-| Stage 2 | 条件预测层 | 无监督 `P(列 \| 其余列)` | 补规则层漏掉的**分布异常**与**键→值冲突** |
-| Stage 3 | LLM 精检层 | 整行语义推理 + 统计画像 | **确认**、**分类**、**过滤误报**、**标准化修复** |
+| Stage 1 | 规则层 | 显式规则 + 统计 + LLM 辅助归纳 + 高精度检测器 | 高精度检出**可写成规则**的明确错误 |
+| Stage 2 | 多检测器候选层 | 多检测器并行 + 证据融合 + 置信度分层 | 高召回补盲点：分布/拼写/关联/依赖/近邻/聚类异常 |
+| Stage 3 | LLM 精检层 | 证据包语义推理 + 统计画像 | **确认**、**分类**、**过滤误报**、**标准化修复** |
+
+> 升级说明：Stage 2 由「单一条件预测模型」扩展为「多检测器 + 证据融合」框架（文档 §7-§15）。
+> 原条件预测模型作为 `reconstruction` 检测器保留。为消除与 Stage 1 的重复检测，**Typo /
+> 主导格式(format_outlier) / 近似函数依赖(FD) 已从 Stage 1 迁入 Stage 2**。默认启用核心高召回
+> 检测器：`reconstruction / statistical / categorical / neighbor / approx_fd`（FD 默认走 LLM
+> 语义校验）；`association / clustering` 误报较高默认关闭，可 `--all-detectors` / `--detectors`
+> 开启。多检测器证据按 `(row_id, column)` 加权融合为 `suspicion_score` 与 `confidence_tier`
+> （high/mid/low），供 Stage 3 分层精检（`--min-tier`）。Stage 1 另保留极端统计兜底
+> （Robust-Z>6 + IQR k=4.5）只捞确凿极端值。
 
 ```mermaid
 flowchart LR
-    IN["脏表 CSV"] --> S1["Stage 1<br/>规则层<br/>MV/DMV/FI/T/VAD"]
-    S1 --> S2["Stage 2<br/>条件预测层<br/>DIST"]
+    IN["脏表 CSV"] --> S1["Stage 1<br/>规则层<br/>MV/DMV/FI"]
+    S1 --> S2["Stage 2<br/>多检测器+融合<br/>DIST/T/VAD"]
     S2 --> S3["Stage 3<br/>LLM 精检层<br/>确认·分类·修复"]
     S3 --> OUT["最终错误列表<br/>final_errors.csv"]
 
@@ -54,9 +63,9 @@ flowchart LR
 |------|-------------|--------------|----------|
 | **MV** | Missing Value，缺失值 | Stage 1 | 空串、NaN、`empty` 等哨兵出现在不可空列 |
 | **DMV** | Dummy Missing Value，伪缺失值 | Stage 1 | 非空但语义缺失：`?`、`unknown`、`missing`、`n.a.` |
-| **FI** | Format Inconsistency，格式/类型不一致 | Stage 1（Stage 3 可细化 DIST→FI） | 正则不符、长度/范围越界、枚举非法、逻辑类型不符、元数据泄漏、列对调、重复值、主导格式偏离 |
-| **T** | Typo，拼写错误 | Stage 1 | 低频 typo 相对高频锚点（编辑距离） |
-| **VAD** | Value Against Dependency，跨列依赖违反 | Stage 1（Stage 3 可细化 DIST→VAD） | ZipCode↔City 不匹配、近似函数依赖违反 |
+| **FI** | Format Inconsistency，格式/类型不一致 | Stage 1（Stage 3 可细化 DIST→FI） | 正则不符、长度/范围越界、枚举非法、逻辑类型不符、元数据泄漏、列对调、重复值、极端统计离群（主导格式偏离已迁至 Stage 2 format_cluster） |
+| **T** | Typo，拼写错误 | Stage 2（categorical 检测器） | 低频 typo 相对高频锚点（编辑距离 / rapidfuzz 相似） |
+| **VAD** | Value Against Dependency，跨列依赖违反 | Stage 2（approx_fd / association；Stage 3 可细化 DIST→VAD） | ZipCode↔City 不匹配、近似函数依赖违反 |
 | **DIST** | Distribution anomaly，分布异常 | Stage 2 | 条件概率极低、数值残差过大、形态重构误差高 |
 | **OTHER** | 其他语义错误 | Stage 3 | LLM 判定为错误但无法归入上述类别 |
 | **NONE** | 非错误（误报否决） | Stage 3 | 前序候选经 LLM 判定为合法值，不进入最终结果 |
@@ -129,7 +138,7 @@ python -m stage_3.cli --input data/hospital_dirty.csv   # Stage 3
 
 Stage 1 是流水线的**第一道关卡**，负责检出能用**明确规则或统计方法**描述的错误。特点是精度高、可解释、规则可缓存（LLM 仅用于规则归纳，不逐格调用）。
 
-**擅长：** 格式明确可规则化的错误；强跨列函数依赖；高频拼写 typo；缺失值与伪缺失值；逻辑类型不符。
+**擅长：** 格式明确可规则化的错误；缺失值与伪缺失值；逻辑类型不符；确定性结构错误（列对调/重复值/元数据泄漏）；极端数值/日期离群。
 
 **不擅长：** 软统计型跨列异常；数值离群但仍在合法范围内；难以写成规则的语义错误。
 
@@ -150,8 +159,8 @@ Stage 1 是流水线的**第一道关卡**，负责检出能用**明确规则或
 | 字段 | 说明 |
 |------|------|
 | `row_id, column, value` | 错误位置与当前值 |
-| `error_type` | MV / DMV / FI / T / VAD |
-| `violated_rule` | 触发的规则类型（如 `regex`、`missing_value`、`fd_violation`） |
+| `error_type` | MV / DMV / FI（T/VAD 已迁至 Stage 2） |
+| `violated_rule` | 触发的规则类型（如 `regex`、`missing_value`、`extreme_outlier`、`column_swap`） |
 | `reason` | 人类可读原因 |
 | `suggested_fix, confidence` | 修复建议与置信度（部分检测器填写） |
 
@@ -182,14 +191,13 @@ flowchart TD
     CELL -->|列循环结束| GLOBAL
 
     subgraph GLOBAL["列循环后全局检测（跳过 flagged_cells）"]
-        T["⑨ Typo typo_detect.py → T"]
-        DMV["⑩ 伪缺失 dmv_detect.py → DMV"]
-        STD["⑪ 标准化 standardize_detect.py → FI"]
-        LEAK["⑫ 元数据泄漏 leakage_detect.py → FI"]
-        DUP["⑬ 重复值 dup_detect.py → FI"]
-        FMT["⑭ 主导格式 fmt_detect.py → FI"]
-        XCOL["⑮ 跨列对调 xcol_detect.py → FI"]
-        FD["⑯ 函数依赖 fd_detect.py → VAD"]
+        DMV["⑨ 伪缺失 dmv_detect.py → DMV"]
+        STD["⑩ 标准化 standardize_detect.py → FI"]
+        LEAK["⑪ 元数据泄漏 leakage_detect.py → FI"]
+        DUP["⑫ 重复值 dup_detect.py → FI"]
+        RANGE["⑬ 硬范围 range_detect.py → FI"]
+        XCOL["⑭ 跨列对调 xcol_detect.py → FI"]
+        STAT["⑮ 极端统计 Robust-Z>6/IQR k=4.5 → FI/extreme_outlier"]
     end
 
     GLOBAL --> OUT["errors.csv + rules.json + clean_mask.csv"]
@@ -212,14 +220,17 @@ flowchart TD
 
 | 序号 | 模块 | 错误类型 | 作用 |
 |------|------|----------|------|
-| ⑨ | `typo_detect.py` | T | 频次 + Levenshtein 编辑距离：低频值相对高频锚点的拼写错误 |
-| ⑩ | `dmv_detect.py` | DMV | 词表匹配识别语义缺失占位值（`?`/`unknown`/`missing` 等） |
-| ⑪ | `standardize_detect.py` | FI | LLM 归纳列内规范表示形态，标记与多数派不一致的取值 |
-| ⑫ | `leakage_detect.py` | FI/metadata_leakage | 识别 RIS/MEDLINE/PubMed 标签混入字段值，长度离群门控降误报 |
-| ⑬ | `dup_detect.py` | FI/duplicate_value | 整值由同一 token 重复拼接（如 `X,X`）的冗余复制 |
-| ⑭ | `fmt_detect.py` | FI/format_outlier | 格式高度统一列中偏离主导形态的值；双门控跳过自由文本/合法多形态列 |
-| ⑮ | `xcol_detect.py` | FI/column_swap | 统计发现"全名↔标准缩写"列对，LLM 语义确认后标记对调行 |
-| ⑯ | `fd_detect.py` | VAD | 近似函数依赖（FD）挖掘；可选 LLM 语义校验过滤伪依赖 |
+| ⑨ | `dmv_detect.py` | DMV | 词表匹配识别语义缺失占位值（`?`/`unknown`/`missing` 等） |
+| ⑩ | `standardize_detect.py` | FI | LLM 归纳列内规范表示形态，标记与多数派不一致的取值 |
+| ⑪ | `leakage_detect.py` | FI/metadata_leakage | 识别 RIS/MEDLINE/PubMed 标签混入字段值，长度离群门控降误报 |
+| ⑫ | `dup_detect.py` | FI/duplicate_value | 整值由同一 token 重复拼接（如 `X,X`）的冗余复制 |
+| ⑬ | `range_detect.py` | FI/range_error | 按 semantic_type 施加 age/percentage/price/lat/lon/year 等硬范围 |
+| ⑭ | `xcol_detect.py` | FI/column_swap | 统计发现"全名↔标准缩写"列对，LLM 语义确认后标记对调行 |
+| ⑮ | `detect_statistical`（复用 stage_2） | FI/extreme_outlier | 数值/日期列 Robust-Z(>6)+IQR(k=4.5) 双判据，只捞确凿极端值 |
+
+> 已迁出 Stage 1（并入 Stage 2 多检测器层，消除重复检测）：Typo（→ categorical）、
+> 主导格式 format_outlier（→ format_cluster）、近似函数依赖 FD（→ approx_fd，默认 LLM 语义校验）。
+> `iforest_detect.py`（孤立森林）、`arith_rules.py`（LLM 跨列算术）默认关闭，可在 `execution` 配置开启。
 
 #### 4.3.3 辅助机制
 
@@ -272,11 +283,36 @@ Stage 2 在 Stage 1 标记的**干净子集**上学习每一列的**条件分布
 | `suggested_fix` | 模型最偏好的替代取值（精度闸门通过时） |
 | `subtype` | `categorical` / `numeric` / `surrogate` |
 
-**combined_candidates.csv 额外字段：**
+**combined_candidates.csv 额外字段（证据融合）：**
 
 | 字段 | 说明 |
 |------|------|
-| `source` | `stage1` 或 `stage2`（同格冲突时 Stage 1 优先） |
+| `source` | `stage1` 或 `stage2`（同格 Stage 1 优先） |
+| `detectors` | 命中该格的检测器列表（逗号分隔） |
+| `suspicion_score` | 加权融合可疑分 `S = 1 - ∏(1 - w·s)` |
+| `confidence_tier` | `high`(≥0.85) / `mid`(≥0.6) / `low` |
+| `evidence` | 各检测器证据汇总文本 |
+| `candidate_fixes` | 各检测器候选修复值汇总 |
+
+### 5.4 多检测器框架与证据融合（升级）
+
+Stage 2 现为可配置的多检测器框架，各检测器统一输出 `CandidateError`（`stage_2/schema.py`），
+由 `stage_2/fusion.py` 按 `(row_id, column)` 聚合：归一化各检测器分数 → 加权融合 → 置信度分层。
+
+| 检测器 | 文件 | 默认 | 错误类型 | 机制 |
+|--------|------|------|----------|------|
+| reconstruction | `detectors/reconstruction.py` | 开 | DIST | 条件预测 `P(列\|其余列)`（原 Stage 2 模型） |
+| statistical | `detectors/statistical.py` | 开 | DIST | 数值 Robust-Z + IQR；日期 Robust-Z |
+| categorical | `detectors/categorical.py` | 开 | T/FI | 低频值 + rapidfuzz 拼写相似 + 罕见字符模式（含 format_cluster） |
+| neighbor_consistency | `detectors/neighbor_consistency.py` | 开 | DIST/VAD | KNN 近邻数值偏离 / 类别多数 |
+| approx_fd | `detectors/fd_detector.py` | 开 | VAD | 复用 Stage1 FD 统计挖掘，默认 LLM 语义校验（无 LLM 退化为纯统计） |
+| association_rule | `detectors/association_rule.py` | 关 | VAD | 单前件关联规则 support/confidence/lift |
+| clustering | `detectors/clustering.py` | 关 | DIST | LOF 行级离群 + 逐列定位（低权重） |
+
+**融合权重与分层：** strong_rule=1.0、approx_fd=0.9、reconstruction=0.85、association/typo=0.8、
+neighbor=0.75、statistical/format_cluster=0.6、clustering=0.4；`high≥0.85 / mid≥0.6 / low`。
+
+**消融：** `python -m stage_2.ablation --dirty data/<ds>_dirty.csv` 量化各检测器边际贡献。
 
 ### 5.3 内部组成
 
@@ -378,7 +414,9 @@ Stage 3 对 Stage 1 + Stage 2 合并后的**可疑单元格候选**做语义级�
 | `suggested_fix` | 标准化修复建议 |
 | `llm_reason` | LLM 推理说明 |
 
-**final_errors.csv：** 仅含 `is_error=True` 的格，字段精简为 `row_id, column, error_type, confidence, suggested_fix`。
+**final_errors.csv：** 仅含 `is_error=True` 的格，字段为 `row_id, column, error_type, confidence, suggested_fix, fix_source, fix_confidence`（`fix_source` ∈ llm/consensus/prior/prior_rule/propagated）。
+
+**升级：** Stage 3 现接收 Stage 2 的融合证据包——prompt 注入 `multi_detector_evidence`（detectors / suspicion_score / confidence_tier / evidence / candidate_fixes），多检测器一致指向同一格时提高判错把握。`--min-tier {low,mid,high}` 可只精检 ≥ 指定层级的候选，权衡召回与 LLM 成本。
 
 ### 6.3 内部组成
 
@@ -396,7 +434,7 @@ flowchart TD
     LOAD --> GROUP["按 row_id 分组 → RowContext"]
     GROUP --> ROW_LOOP["逐行 verify_row"]
 
-    ROW_LOOP --> AUTO{"auto_confirm?<br/>duplicate_value / format_outlier"}
+    ROW_LOOP --> AUTO{"auto_confirm?<br/>duplicate_value"}
     AUTO -->|是| ACONF["直通确认 conf=0.95<br/>跳过 LLM"]
     AUTO -->|否| PROMPT["build_prompt prompt.py"]
 
@@ -441,7 +479,7 @@ flowchart TD
 
 | 保护 | 触发条件 | 行为 |
 |------|----------|------|
-| **确定性结构错误直通** | `violated_rule ∈ {duplicate_value, format_outlier}` | 直接确认（conf=0.95），跳过 LLM；整行皆此类则整行跳过 LLM |
+| **确定性结构错误直通** | `violated_rule ∈ {duplicate_value}` | 直接确认（conf=0.95），跳过 LLM；整行皆此类则整行跳过 LLM（format_outlier 已迁出，不再直通） |
 | **Stage1-MV 保护** | `prior_source=stage1` 且 `prior_error_type=MV`，LLM 判 NONE | 维持为错误，不因 LLM 否决而丢弃 |
 | **共识冲突保护** | `prior_source=stage2` 且跨行共识冲突，LLM 低把握（<0.85）判 NONE | 维持为错误，补 `suggested_fix=majority_value` |
 | **解析失败兜底** | LLM 未返回该格判定 | 维持前序错误，conf=0.5 |
@@ -460,9 +498,9 @@ flowchart TD
 
 | 维度 | Stage 1 | Stage 2 | Stage 3 |
 |------|---------|---------|---------|
-| 检测范式 | 规则 + 统计 + LLM 辅助归纳 | 无监督条件预测 P(列\|其余列) | LLM 语义推理 + 统计画像 |
-| 主要目标 | 高精度召回明确错误 | 补规则层盲点 | 确认、分类、过滤误报、标准化修复 |
-| 产出错误类型 | MV / DMV / FI / T / VAD | DIST | 维持前序或细化为 VAD/FI/DMV/OTHER/NONE |
+| 检测范式 | 规则 + 统计 + LLM 辅助归纳 | 多检测器并行 + 证据融合（重构/统计/类别/近邻/FD…） | LLM 语义推理 + 统计画像 |
+| 主要目标 | 高精度召回明确错误 | 高召回补规则层盲点 | 确认、分类、过滤误报、标准化修复 |
+| 产出错误类型 | MV / DMV / FI | DIST / T / VAD | 维持前序或细化为 VAD/FI/DMV/OTHER/NONE |
 | 可解释性 | 高（规则、reason） | 中（anomaly_score、subtype） | 高（llm_reason、suggested_fix） |
 | LLM 使用 | 规则归纳（按列，可缓存） | 无 | 逐行精检（可缓存） |
 | 精度倾向 | 高 P，R ~85% | 中等 P，补召回 | 提升最终 P，输出可交付结果 |
@@ -509,8 +547,9 @@ python -m stage_3.evaluate --dirty data/hospital_dirty.csv   # 精检前 vs 精�
 
 | 评估脚本 | 对比对象 |
 |----------|----------|
-| `stage_2.evaluate` | Stage 1 单独、Stage 2 单独、合并 S1∪S2 的 P/R/F1 |
-| `stage_3.evaluate` | 精检前（合并候选）vs 精检后（final_errors）的 P/R/F1；按列误报化解 Top-N |
+| `stage_2.evaluate` | Stage 1 / Stage 2 / 合并 S1∪S2 的 cell-level、分组、**row-level** P/R/F1 |
+| `stage_3.evaluate` | 精检前 vs 精检后 P/R/F1；**correction-level** 修复准确率；**按 error_type 分项**；按列误报化解 Top-N |
+| `stage_2.ablation` | 各检测器子集组合（含留一法）对合并集 P/R/F1 的边际贡献 |
 
 ---
 

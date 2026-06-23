@@ -44,13 +44,17 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
      不要因"格式正常"就轻易判 NONE。
    - 当本格取值与同 key 多数值一致时，倾向判 NONE。
    - model_anomaly_score 越高，表示分布模型越认为本值可疑，可作为参考。
-4. 对确实是错误的，请给出标准化的正确值 suggested_fix（old->new 映射思路）:
+4. 若提供 multi_detector_evidence（多检测器证据融合）:
+   - detectors 列出命中本格的检测器；命中越多、suspicion_score 越高、confidence_tier 越高，
+     越可能是真错误。多个独立检测器一致指向同一格时应提高判定为错误的把握。
+   - candidate_fixes 汇总各检测器给出的候选修复值，可作为 suggested_fix 的参考。
+5. 对确实是错误的，请给出标准化的正确值 suggested_fix（old->new 映射思路）:
    - 优先映射到该列 value_frequencies / normal_samples 中已存在的规范表示
      （如 "English"->"eng"、"NY"->"New York" 取该列的主流写法）。
    - 同一脏值在该列应映射到同一规范值，保持一致。
    - DMV / MV 这类缺失，若无法恢复真实值，suggested_fix 置为 null。
    - 无法确定正确值时置为 null。
-5. confidence 取 0~1，表示"这是错误"的把握；判 NONE 时表示"这是误报"的把握。
+6. confidence 取 0~1，表示"这是错误"的把握；判 NONE 时表示"这是误报"的把握。
    当依据充分（如明显冲突或明显 typo）请给出较高 confidence。
 """
 
@@ -86,6 +90,18 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
         }
         if s.anomaly_score is not None:
             item["model_anomaly_score"] = round(float(s.anomaly_score), 3)
+        if s.confidence_tier:
+            fusion = {
+                "detectors": s.detectors,
+                "confidence_tier": s.confidence_tier,
+            }
+            if s.suspicion_score is not None:
+                fusion["suspicion_score"] = round(float(s.suspicion_score), 3)
+            if s.fused_evidence:
+                fusion["evidence"] = s.fused_evidence
+            if s.candidate_fixes:
+                fusion["candidate_fixes"] = s.candidate_fixes
+            item["multi_detector_evidence"] = fusion
         if s.column_stats:
             cs = s.column_stats
             stats = {

@@ -49,6 +49,7 @@ class Stage3Config:
     min_lift: float = 0.15              # 组内占比相对全局基准占比的最小提升（排除类别不平衡伪共识）
     reject_conf_threshold: float = 0.85  # 共识冲突候选被 LLM 否决所需的最低把握
     protect_stage1_mv: bool = True       # Stage1 确定性缺失值不被 LLM 否决（确定信号，零误报回退）
+    min_tier: str = "low"                # 仅精检 confidence_tier >= 该层级的候选（low=全部）
     layout: OutputLayout = field(default_factory=OutputLayout)
     paths: PathsConfig = field(default_factory=PathsConfig)
     llm: Stage1Config = field(default=None)

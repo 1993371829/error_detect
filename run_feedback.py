@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="每列新增剔除上限比例（默认 0.05）")
     p.add_argument("--no-include", action="store_true",
                    help="只剔除污染、不找回误报（flights 调参显示更优）")
+    p.add_argument("--vocab-denoise", action="store_true",
+                   help="refine 后再跑 LLM-free 词表去污（剔除漏报 typo），round-1 用去污掩码")
     p.add_argument("--skip-round0", action="store_true",
                    help="跳过 round-0 的 S1/S2/S3，直接复用已有产物（含已有 stage3_results）")
     p.add_argument("--skip-stage1", action="store_true",
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> None:
     cfg = Stage2Config()
     dp = resolve_dataset_paths(dirty, cfg.layout, dataset=args.dataset)
     r1_mask = dp.clean_mask.parent / f"{dp.dataset}_clean_mask_r1.csv"
+    r1d_mask = dp.clean_mask.parent / f"{dp.dataset}_clean_mask_r1d.csv"
 
     # ---- round-0 ----
     if not args.skip_round0:
@@ -116,15 +119,24 @@ def main(argv: list[str] | None = None) -> None:
     if args.no_include:
         refine_argv.append("--no-include")
     _run(refine_argv)
+
+    round1_mask = r1_mask
+    if args.vocab_denoise:
+        print("\n########## VOCAB-DENOISE: r1 掩码 -> r1d ##########")
+        _run([py, "-m", "stage_2.vocab_denoise", "--dirty", dirty, *ds_args,
+              "--clean-mask", str(r1_mask), "--out", str(r1d_mask),
+              "--max-exclude-ratio", str(args.max_exclude_ratio)])
+        round1_mask = r1d_mask
+
     diag1 = _parse_leak(
         _run([py, "-m", "stage_2.diagnose_mask", "--dirty", dirty, *ds_args,
-              "--clean-mask", str(r1_mask)], capture=True)
+              "--clean-mask", str(round1_mask)], capture=True)
     )
 
     # ---- round-1 ----
     print("\n########## ROUND 1: Stage2(r1 mask) -> Stage3 ##########")
     _run([py, "-m", "stage_2.cli", "--input", dirty, *ds_args,
-          "--clean-mask", str(r1_mask)])
+          "--clean-mask", str(round1_mask)])
     _run([py, "-m", "stage_3.cli", "--input", dirty, *ds_args])
     eval1 = _parse_eval(
         _run([py, "-m", "stage_3.evaluate", "--dirty", dirty, *ds_args], capture=True)

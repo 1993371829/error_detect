@@ -23,8 +23,9 @@ from stage_2.io_utils import read_table
 
 # 高置信确定性结构错误：这类前序判定无需 LLM 复核，直接确认（省 LLM 调用、防误杀）。
 # - duplicate_value：整值由同一 token 重复拼接，Stage1 实测精度 0.99+。
-# - format_outlier：格式高度统一的列里偏离主导形态的值（双门控），实测精度 0.98+。
-AUTO_CONFIRM_RULES = {"duplicate_value", "format_outlier"}
+# 注：format_outlier 已随主导格式检测迁出 Stage 1（并入 Stage 2 categorical 走融合 + LLM 复核），
+#     不再自动确认。
+AUTO_CONFIRM_RULES = {"duplicate_value"}
 
 
 @dataclass
@@ -45,6 +46,12 @@ class SuspectCell:
     consensus: Optional[dict] = None   # 同 key 共识证据（见 _cell_consensus）
     column_stats: Optional[dict] = None  # 该列统计画像（借鉴 Cocoon，供 LLM 基于分布判断）
     auto_confirm: bool = False         # 高置信确定性结构错误，直通确认不经 LLM
+    # 多检测器证据融合（Stage 2 升级）
+    detectors: str = ""                # 命中的检测器列表（逗号分隔）
+    suspicion_score: Optional[float] = None  # 融合可疑分
+    confidence_tier: str = ""          # high/mid/low
+    fused_evidence: str = ""           # 各检测器证据汇总文本
+    candidate_fixes: str = ""          # 候选修复值汇总
 
     @property
     def consensus_conflict(self) -> bool:
@@ -373,9 +380,26 @@ def build_row_contexts(
                 consensus=consensus,
                 column_stats=column_stats.get(col),
                 auto_confirm=violated_rule in AUTO_CONFIRM_RULES,
+                detectors=str(r.get("detectors", "") or ""),
+                suspicion_score=_to_float(r.get("suspicion_score")),
+                confidence_tier=str(r.get("confidence_tier", "") or ""),
+                fused_evidence=str(r.get("evidence", "") or ""),
+                candidate_fixes=str(r.get("candidate_fixes", "") or ""),
             ))
         contexts.append(RowContext(row_id=int(row_id), row_values=row_values, suspects=suspects))
     return contexts
+
+
+_TIER_RANK = {"low": 0, "mid": 1, "high": 2, "": 0}
+
+
+def filter_by_tier(candidates: pd.DataFrame, min_tier: str) -> pd.DataFrame:
+    """按 confidence_tier 过滤候选（保留 >= min_tier 的格）。min_tier='low' 不过滤。"""
+    if min_tier in (None, "", "low") or "confidence_tier" not in candidates.columns:
+        return candidates
+    floor = _TIER_RANK.get(min_tier, 0)
+    keep = candidates["confidence_tier"].map(lambda t: _TIER_RANK.get(str(t), 0) >= floor)
+    return candidates[keep].reset_index(drop=True)
 
 
 def load_contexts(
@@ -387,10 +411,12 @@ def load_contexts(
     min_avg_group: float = 3.0,
     min_dominance: float = 0.5,
     min_lift: float = 0.15,
+    min_tier: str = "low",
 ) -> tuple[pd.DataFrame, list[RowContext]]:
     """一站式加载：返回 (原始表, RowContext 列表)。"""
     df = read_table(input_csv)
     candidates = read_table(candidates_csv)
+    candidates = filter_by_tier(candidates, min_tier)
     semantic_types = load_semantic_types(rules_json)
     normal_samples = compute_normal_samples(df, max_samples=max_normal_samples)
     column_stats = compute_column_stats(df, max_top=max_normal_samples)

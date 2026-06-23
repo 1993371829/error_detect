@@ -58,6 +58,19 @@ def metrics(detected: set, gt: set) -> dict:
             "precision": round(prec, 3), "recall": round(rec, 3), "f1": round(f1, 3)}
 
 
+def row_metrics(detected: set, gt: set) -> dict:
+    """行级 P/R/F1：一行只要含被检出的错误单元格即视为“检出错误行”。"""
+    det_rows = {r for r, _ in detected}
+    gt_rows = {r for r, _ in gt}
+    return metrics(det_rows, gt_rows)
+
+
+def _report_rowlevel(name: str, cells: set, gt: set) -> None:
+    m = row_metrics(cells, gt)
+    print(f"{'  └ row-level':18s} 错误行={m['detected']:4d} TP={m['tp']:4d} FP={m['fp']:4d} "
+          f"P={m['precision']:.3f} R={m['recall']:.3f} F1={m['f1']:.3f}")
+
+
 def classify_columns(df: pd.DataFrame, numeric_min_ratio: float = 0.8) -> dict:
     """把列粗分为 numeric / categorical，用于分组评估（与 encoding 判定口径一致）。"""
     kinds: dict[str, str] = {}
@@ -148,18 +161,21 @@ def main(argv: list[str] | None = None) -> None:
         s1 = cells_from(read_table(stage1_path))
         _report("Stage1(规则层)", s1, gt)
         _report_grouped("Stage1", s1, gt, kinds)
+        _report_rowlevel("Stage1", s1, gt)
 
     dist = None
     if Path(candidates_path).exists():
         dist = cells_from(read_table(candidates_path))
         _report("Stage2(DIST)", dist, gt)
         _report_grouped("Stage2(DIST)", dist, gt, kinds)
+        _report_rowlevel("Stage2(DIST)", dist, gt)
 
     comb = None
     if Path(combined_path).exists():
         comb = cells_from(read_table(combined_path))
         _report("合并(S1+S2)", comb, gt)
         _report_grouped("合并(S1+S2)", comb, gt, kinds)
+        _report_rowlevel("合并(S1+S2)", comb, gt)
 
     if args.by_column:
         if dist is not None:
