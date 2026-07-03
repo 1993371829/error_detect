@@ -23,6 +23,7 @@ import json
 from typing import Optional
 
 from stage_1.config import Stage1Config
+from stage_1.llm_usage import record_llm_usage
 
 
 # LLM 提示词模板：要求输出 JSON，并强调不要过度拟合脏数据
@@ -132,6 +133,7 @@ class LLMClient:
         if self.max_tokens and self.max_tokens > 0:
             kwargs["max_tokens"] = self.max_tokens  # 截断保护
         resp = self.client.chat.completions.create(**kwargs)
+        record_llm_usage(getattr(resp, "usage", None))
         return resp.choices[0].message.content
 
 
