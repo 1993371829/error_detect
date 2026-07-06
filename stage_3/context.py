@@ -52,6 +52,7 @@ class SuspectCell:
     confidence_tier: str = ""          # high/mid/low
     fused_evidence: str = ""           # 各检测器证据汇总文本
     candidate_fixes: str = ""          # 候选修复值汇总
+    family_count: int = 0              # 命中的独立证据族数（跨族一致越多越可能真错）
 
     @property
     def consensus_conflict(self) -> bool:
@@ -385,6 +386,7 @@ def build_row_contexts(
                 confidence_tier=str(r.get("confidence_tier", "") or ""),
                 fused_evidence=str(r.get("evidence", "") or ""),
                 candidate_fixes=str(r.get("candidate_fixes", "") or ""),
+                family_count=int(_to_float(r.get("family_count")) or 0),
             ))
         contexts.append(RowContext(row_id=int(row_id), row_values=row_values, suspects=suspects))
     return contexts

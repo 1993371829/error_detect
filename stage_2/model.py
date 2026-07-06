@@ -99,6 +99,9 @@ class ConditionalPredictor:
         seed: int = 0,
         verbose: bool = True,
         device: str = "auto",
+        val_split: float = 0.15,
+        patience: int = 15,
+        min_delta: float = 1e-4,
     ):
         self.hidden_dim = hidden_dim
         self.epochs = epochs
@@ -108,10 +111,16 @@ class ConditionalPredictor:
         self.seed = seed
         self.verbose = verbose
         self.device_pref = device
+        # 早停：留出验证集，val_loss 连续 patience 轮无改善即停并回滚到最优权重。
+        # val_split<=0 或样本过少时退回「训练全量 + 跑满 epochs」的旧行为。
+        self.val_split = val_split
+        self.patience = patience
+        self.min_delta = min_delta
         self._encoder = None
         self._heads = None          # torch ModuleDict，键为 "h{idx}"
         self._specs = None
         self._head_key: dict[str, str] = {}   # col name -> head key
+        self._spec_col: dict[str, int] = {}   # col name -> specs 列表下标（cell_valid 对齐用）
         self._device = "cpu"        # 实际设备，fit() 时按 device_pref 解析
 
     # ------------------------------------------------------------------ build
@@ -173,7 +182,25 @@ class ConditionalPredictor:
         return self._heads[self._head_key[spec.name]](h)
 
     # ------------------------------------------------------------------ fit
-    def fit(self, x_clean: np.ndarray, specs: list) -> "ConditionalPredictor":
+    def fit(
+        self,
+        x_clean: np.ndarray,
+        specs: list,
+        cell_valid: Optional[np.ndarray] = None,
+        x_input: Optional[np.ndarray] = None,
+    ) -> "ConditionalPredictor":
+        """
+        在（伪）干净特征矩阵上训练。
+
+        Args:
+            x_clean:  取训练目标（真值）的特征矩阵 (n, d)。
+            specs:    列规格列表（来自 encoder.column_specs()）。
+            cell_valid: 可选 cell 级有效掩码 (n, len(specs))，按 specs 顺序对齐；
+                        False 表示该 (行, 列) 被屏蔽（伪干净构造里的单错格），
+                        其目标不计入 loss。None 时全部有效（旧行为）。
+            x_input:  可选上下文输入矩阵 (n, d)，用于「作为其余列的上下文」；被屏蔽格
+                        在此已中性化（见 score.neutralize_context）。None 时等于 x_clean。
+        """
         torch = _require_torch()
         import torch.nn as nn
         import torch.nn.functional as F
@@ -183,6 +210,7 @@ class ConditionalPredictor:
         if self.verbose:
             print(f"  [CondPred] device={self._device}")
         self._specs = list(specs)
+        self._spec_col = {s.name: i for i, s in enumerate(self._specs)}
         d = x_clean.shape[1]
         self._encoder, self._heads = self._build(d)
         self._encoder.to(self._device)
@@ -192,36 +220,127 @@ class ConditionalPredictor:
         optimizer = torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
 
         x = torch.tensor(np.asarray(x_clean, dtype=np.float32), device=self._device)
+        # 上下文输入：默认与目标一致；伪干净时传入中性化后的矩阵以隔离被屏蔽格
+        if x_input is not None:
+            x_in = torch.tensor(np.asarray(x_input, dtype=np.float32), device=self._device)
+        else:
+            x_in = x
+        cv = None
+        if cell_valid is not None:
+            cv = torch.tensor(np.asarray(cell_valid, dtype=bool), device=self._device)
         n = x.shape[0]
         trainable = [s for s in self._specs if self._target_dim(s) > 0]
+
+        # 划分训练/验证子集（样本足够时才启用早停，否则全量训练跑满 epochs）
+        gen = torch.Generator(device=self._device).manual_seed(self.seed)
+        perm0 = torch.randperm(n, generator=gen, device=self._device)
+        use_val = self.val_split and self.val_split > 0 and n >= 20
+        if use_val:
+            n_val = max(1, int(round(n * self.val_split)))
+            val_idx = perm0[:n_val]
+            train_idx = perm0[n_val:]
+        else:
+            val_idx = None
+            train_idx = perm0
+        n_train = int(train_idx.shape[0])
+
+        best_val = float("inf")
+        best_state = None
+        no_improve = 0
 
         self._encoder.train()
         self._heads.train()
         for epoch in range(self.epochs):
-            perm = torch.randperm(n, device=self._device)
+            self._encoder.train()
+            self._heads.train()
+            perm = train_idx[torch.randperm(n_train, device=self._device)]
             epoch_loss = 0.0
-            for start in range(0, n, self.batch_size):
+            for start in range(0, n_train, self.batch_size):
                 idx = perm[start:start + self.batch_size]
-                batch = x[idx]
+                batch = x[idx]              # 目标（真值）来源
+                batch_in = x_in[idx]        # 上下文输入来源（被屏蔽格已中性化）
+                cv_batch = cv[idx] if cv is not None else None
                 optimizer.zero_grad()
-                loss = batch.new_zeros(())
-                for spec in trainable:
-                    out = self._masked_forward(batch, spec)
-                    target, valid = self._targets_for(spec, batch)
-                    if spec.target_kind == "categorical":
-                        loss = loss + F.cross_entropy(out, target)
-                    elif spec.target_kind == "numeric":
-                        if bool(valid.any()):
-                            loss = loss + F.mse_loss(out[:, 0][valid], target[valid])
-                    elif spec.target_kind == "surrogate":
-                        if bool(valid.any()):
-                            loss = loss + F.mse_loss(out[valid], target[valid])
+                loss = self._batch_loss(batch, batch_in, cv_batch, trainable, F)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += float(loss.item()) * len(idx)
+
+            if not use_val:
+                if self.verbose and (epoch + 1) % max(1, self.epochs // 10) == 0:
+                    print(f"  [CondPred] epoch {epoch + 1}/{self.epochs} loss={epoch_loss / n_train:.5f}")
+                continue
+
+            # 验证集损失 + 早停
+            val_loss = self._eval_loss(x, x_in, cv, val_idx, trainable, F)
+            if val_loss < best_val - self.min_delta:
+                best_val = val_loss
+                best_state = self._state_snapshot()
+                no_improve = 0
+            else:
+                no_improve += 1
             if self.verbose and (epoch + 1) % max(1, self.epochs // 10) == 0:
-                print(f"  [CondPred] epoch {epoch + 1}/{self.epochs} loss={epoch_loss / n:.5f}")
+                print(f"  [CondPred] epoch {epoch + 1}/{self.epochs} "
+                      f"train={epoch_loss / n_train:.5f} val={val_loss:.5f} best={best_val:.5f}")
+            if no_improve >= self.patience:
+                if self.verbose:
+                    print(f"  [CondPred] 早停于 epoch {epoch + 1}（val 连续 {self.patience} 轮无改善）")
+                break
+
+        if use_val and best_state is not None:
+            self._load_snapshot(best_state)
         return self
+
+    # ------------------------------------------------------------------ loss helpers
+    def _batch_loss(self, batch, batch_in, cv_batch, trainable, F):
+        """一个 batch 的多列联合 loss（训练/验证共用）。"""
+        loss = batch.new_zeros(())
+        for spec in trainable:
+            out = self._masked_forward(batch_in, spec)
+            target, valid = self._targets_for(spec, batch)
+            # cell 级掩码：被屏蔽格（伪干净的单错格）不计入该列 loss
+            if cv_batch is not None:
+                valid = valid & cv_batch[:, self._spec_col[spec.name]]
+            if spec.target_kind == "categorical":
+                if bool(valid.all()):
+                    loss = loss + F.cross_entropy(out, target)
+                elif bool(valid.any()):
+                    loss = loss + F.cross_entropy(out[valid], target[valid])
+            elif spec.target_kind == "numeric":
+                if bool(valid.any()):
+                    loss = loss + F.mse_loss(out[:, 0][valid], target[valid])
+            elif spec.target_kind == "surrogate":
+                if bool(valid.any()):
+                    loss = loss + F.mse_loss(out[valid], target[valid])
+        return loss
+
+    def _eval_loss(self, x, x_in, cv, val_idx, trainable, F) -> float:
+        """验证集平均 batch loss（no_grad）。"""
+        torch = _require_torch()
+        self._encoder.eval()
+        self._heads.eval()
+        n_val = int(val_idx.shape[0])
+        total, n_batches = 0.0, 0
+        with torch.no_grad():
+            for start in range(0, n_val, self.batch_size):
+                idx = val_idx[start:start + self.batch_size]
+                cv_batch = cv[idx] if cv is not None else None
+                loss = self._batch_loss(x[idx], x_in[idx], cv_batch, trainable, F)
+                total += float(loss.item())
+                n_batches += 1
+        return total / max(1, n_batches)
+
+    def _state_snapshot(self) -> dict:
+        """深拷贝当前编码器/头权重（供早停回滚）。"""
+        import copy
+        return {
+            "encoder": copy.deepcopy(self._encoder.state_dict()),
+            "heads": copy.deepcopy(self._heads.state_dict()),
+        }
+
+    def _load_snapshot(self, state: dict) -> None:
+        self._encoder.load_state_dict(state["encoder"])
+        self._heads.load_state_dict(state["heads"])
 
     # ------------------------------------------------------------------ predict
     def predict(self, x: np.ndarray) -> dict:

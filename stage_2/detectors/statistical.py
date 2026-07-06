@@ -31,14 +31,43 @@ def _numeric_values(series: pd.Series) -> np.ndarray:
     return out
 
 
+# 常见日期格式：优先用显式 format 走 pandas 向量化 C 路径（快且不触发 dateutil 逐元素回退警告）
+_COMMON_DATE_FORMATS = [
+    "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%m-%d-%Y", "%Y.%m.%d",
+    "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%m/%d/%Y %H:%M", "%Y%m%d",
+    "%d-%b-%Y", "%d %b %Y", "%b %d, %Y", "%Y-%m",
+]
+
+
+def _best_date_format(sample: pd.Series) -> Optional[str]:
+    """在样本上挑选解析率最高的显式格式（>=0.8 才采用），否则 None（回退灵活解析）。"""
+    best_fmt, best_rate = None, 0.0
+    for fmt in _COMMON_DATE_FORMATS:
+        rate = float(pd.to_datetime(sample, format=fmt, errors="coerce").notna().mean())
+        if rate > best_rate:
+            best_fmt, best_rate = fmt, rate
+        if best_rate >= 0.99:
+            break
+    return best_fmt if best_rate >= 0.8 else None
+
+
 def _datetime_values(series: pd.Series) -> tuple[np.ndarray, float]:
-    """逐行时间戳（秒，nan 表示不可解析）与解析率。"""
-    non_blank = series[~series.map(is_blank)].astype(str)
-    if non_blank.empty:
+    """逐行时间戳（秒，nan 表示不可解析）与解析率。
+
+    先在样本上推断主导日期格式，命中则整列用该 format 向量化解析（快、无警告）；
+    未命中再回退到灵活解析。仅解析整列一次。
+    """
+    non_blank_mask = ~series.map(is_blank)
+    if not bool(non_blank_mask.any()):
         return np.full(len(series), np.nan), 0.0
-    parsed_nb = pd.to_datetime(non_blank, errors="coerce")
-    ratio = float(parsed_nb.notna().mean())
-    full = pd.to_datetime(series.astype(str).where(~series.map(is_blank)), errors="coerce")
+    s_str = series.astype(str).where(non_blank_mask)
+    non_blank = s_str[non_blank_mask]
+    fmt = _best_date_format(non_blank.head(200))
+    if fmt is not None:
+        full = pd.to_datetime(s_str, format=fmt, errors="coerce")
+    else:
+        full = pd.to_datetime(s_str, errors="coerce")  # 回退灵活解析（较慢）
+    ratio = float(full[non_blank_mask].notna().mean())
     ts = full.to_numpy().astype("datetime64[ns]").astype(np.int64).astype(np.float64)
     ts[full.isna().to_numpy()] = np.nan
     ts = ts / 1e9

@@ -49,6 +49,9 @@ class LLMConfig:
     temperature: float = 0.0  # 规则归纳需要稳定输出，固定为 0
     max_tokens: int = 4096    # 输出上限，防高基数自由文本列 JSON 被截断（0=不显式传）
     max_retries: int = 1      # JSON 解析/接口调用失败时的额外重试次数
+    # 思考模式（qwen3 等推理模型）：None=不干预服务商默认；False=关闭思考(省 completion token)。
+    # 经 extra_body={"enable_thinking": ...} 传递；非 qwen 模型忽略该参数。
+    enable_thinking: Optional[bool] = None
 
 
 @dataclass
@@ -155,6 +158,71 @@ class StatExtremeConfig:
 
 
 @dataclass
+class ValidationConfig:
+    """规则分档验证阈值（FD/CFD/DC 共用，见 stage_1/rule_validation.py）。
+
+    统计强 -> high（跳过 LLM）；统计弱 -> drop；灰区 -> LLM 三档审核（high/medium/drop）。
+    """
+
+    high_min_support: int = 50
+    high_min_confidence: float = 0.95
+    high_min_stability: float = 0.90
+    drop_max_support: int = 10
+    drop_max_confidence: float = 0.80
+    bootstrap_rounds: int = 30
+    bootstrap_ratio: float = 0.80
+    stability_conf_floor: float = 0.90
+
+
+@dataclass
+class FDConfig:
+    """近似函数依赖(FD)违反检测（前移至 Stage 1，双轨可信度输出）。
+
+    二期起经统一分档验证（rule_validation）赋 severity：
+        统计强 -> high（进 clean_mask）；灰区 -> LLM 三档审核；统计弱 -> drop。
+    阈值与 stage_1/fd_detect.py::discover_all_fds 默认保持一致。
+    """
+
+    enabled: bool = True
+    graded: bool = True                     # 使用分档验证（detect_vad_graded）；关闭则退回二元
+    semantic_check: bool = True             # graded=False 时的旧二元语义校验开关
+    min_confidence: float = 0.9
+    min_group_support: int = 5
+    min_group_confidence: float = 0.9
+    pure_threshold: float = 0.9
+    min_pure_group_ratio: float = 0.85
+    min_distinct_dependents: int = 2
+    max_determinant_unique_ratio: float = 0.5
+    min_dependent_unique: int = 2
+
+
+@dataclass
+class CFDConfig:
+    """条件函数依赖(CFD)检测（二期）：仅挖 FD 漏掉的条件化精修，对全局 FD 去冗余。"""
+
+    enabled: bool = True
+    max_condition_cardinality: int = 20     # 条件列最大基数（低基数类别列才作条件）
+    top_condition_values: int = 10          # 每个条件列取 Top-K 高频取值作条件
+    min_subset_support: int = 30            # 条件子集最小行数
+    min_gain: float = 0.1                   # 条件版一致率较全局 FD 的最小提升（去冗余闸门）
+    min_confidence: float = 0.95            # 条件子集内 FD 最低一致率
+    enable_constant_cfd: bool = True        # (X=x)=>B=const 常量 CFD
+
+
+@dataclass
+class DCConfig:
+    """否定约束(DC)检测（二期）：仅非等值谓词——算术/排序/比较/时序范围。"""
+
+    enabled: bool = True
+    min_support: int = 30
+    max_violation_rate: float = 0.02
+    enable_arith: bool = True               # LLM 归纳的跨列算术约束
+    enable_order: bool = True               # 排序单调一致性（rank 与度量反序）
+    enable_compare: bool = True             # 跨列比较（start<=end / min<=max）
+    enable_temporal: bool = True            # 年份/时间范围合理性
+
+
+@dataclass
 class ExecutionConfig:
     """规则执行阶段的参数。"""
 
@@ -173,6 +241,10 @@ class ExecutionConfig:
     iforest: IForestConfig = field(default_factory=IForestConfig)
     arith: ArithConfig = field(default_factory=ArithConfig)
     statistic_extreme: StatExtremeConfig = field(default_factory=StatExtremeConfig)
+    fd: FDConfig = field(default_factory=FDConfig)
+    cfd: CFDConfig = field(default_factory=CFDConfig)
+    dc: DCConfig = field(default_factory=DCConfig)
+    validation: ValidationConfig = field(default_factory=ValidationConfig)
 
 
 _DEFAULT_DP = default_dataset_paths()
@@ -263,6 +335,22 @@ class Stage1Config:
                         for skey, sval in val.items():
                             if hasattr(cfg.execution.statistic_extreme, skey):
                                 setattr(cfg.execution.statistic_extreme, skey, sval)
+                    elif key == "fd" and isinstance(val, dict):
+                        for fkey, fval in val.items():
+                            if hasattr(cfg.execution.fd, fkey):
+                                setattr(cfg.execution.fd, fkey, fval)
+                    elif key == "cfd" and isinstance(val, dict):
+                        for ckey, cval in val.items():
+                            if hasattr(cfg.execution.cfd, ckey):
+                                setattr(cfg.execution.cfd, ckey, cval)
+                    elif key == "dc" and isinstance(val, dict):
+                        for dkey, dval in val.items():
+                            if hasattr(cfg.execution.dc, dkey):
+                                setattr(cfg.execution.dc, dkey, dval)
+                    elif key == "validation" and isinstance(val, dict):
+                        for vkey, vval in val.items():
+                            if hasattr(cfg.execution.validation, vkey):
+                                setattr(cfg.execution.validation, vkey, vval)
                     elif hasattr(cfg.execution, key):
                         setattr(cfg.execution, key, val)
         if paths := data.get("paths"):

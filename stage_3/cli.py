@@ -67,6 +67,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="关闭 Stage1 缺失值保护（默认开启，不允许 LLM 否决确定性 MV）")
     p.add_argument("--min-tier", default=None, choices=["low", "mid", "high"],
                    help="仅精检置信度分层 >= 该层级的候选（默认 low=全部）")
+    p.add_argument("--max-workers", type=int, default=None,
+                   help="Stage3 LLM 并发线程数（默认 8；1=串行）")
+    thinking = p.add_mutually_exclusive_group()
+    thinking.add_argument("--no-thinking", dest="thinking", action="store_false", default=None,
+                          help="关闭 qwen3 思考模式（省 completion token）")
+    thinking.add_argument("--thinking", dest="thinking", action="store_true", default=None,
+                          help="开启 qwen3 思考模式")
+    p.add_argument("--dedup-context-free", action="store_true", default=None,
+                   help="上下文无关格(MV/DMV/T/FI)按(列,值,类型)复用判定，省调用/ token")
     return p
 
 
@@ -104,6 +113,12 @@ def main(argv: list[str] | None = None) -> None:
         cfg.protect_stage1_mv = False
     if args.min_tier is not None:
         cfg.min_tier = args.min_tier
+    if args.max_workers is not None:
+        cfg.max_workers = args.max_workers
+    if args.thinking is not None:
+        cfg.enable_thinking = args.thinking
+    if args.dedup_context_free is not None:
+        cfg.dedup_context_free = args.dedup_context_free
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
@@ -137,10 +152,15 @@ def main(argv: list[str] | None = None) -> None:
     llm = LLMClient(cfg.llm)
     cache = None if args.no_cache else ResponseCache(cfg.paths.cache)
 
+    print(f"  [stage3] 并发={cfg.max_workers}, 思考模式={cfg.enable_thinking}, "
+          f"上下文无关去重={cfg.dedup_context_free}")
     results = verify_contexts(
         contexts, llm, cache=cache,
         reject_conf_threshold=cfg.reject_conf_threshold,
         protect_stage1_mv=cfg.protect_stage1_mv,
+        max_workers=cfg.max_workers,
+        enable_thinking=cfg.enable_thinking,
+        dedup_context_free=cfg.dedup_context_free,
     )
     results = propagate_fix_mappings(results)
     results_df = pd.DataFrame(results).reindex(columns=RESULT_COLUMNS)

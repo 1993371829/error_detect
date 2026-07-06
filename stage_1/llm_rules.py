@@ -121,17 +121,38 @@ class LLMClient:
         self.temperature = config.llm.temperature
         self.max_tokens = config.llm.max_tokens
         self.max_retries = config.llm.max_retries
+        self.enable_thinking = config.llm.enable_thinking
 
-    def complete(self, prompt: str) -> str:
-        """发送 prompt 并返回模型回复文本（强制 JSON 格式）。"""
+    def complete(
+        self,
+        prompt: str,
+        *,
+        system: Optional[str] = None,
+        enable_thinking: Optional[bool] = None,
+    ) -> str:
+        """发送 prompt 并返回模型回复文本（强制 JSON 格式）。
+
+        Args:
+            system: 可选 system 消息。把稳定的静态提示词放入 system，可命中服务商前缀缓存，
+                    显著降低 prompt 计费（判定输出不变）。
+            enable_thinking: 覆盖本次调用的思考模式；None 时回退到客户端配置 self.enable_thinking。
+                    最终非 None 时经 extra_body 传给 qwen3 等推理模型（False=关思考省 token）。
+        """
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         kwargs = dict(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             temperature=self.temperature,
             response_format={"type": "json_object"},
         )
         if self.max_tokens and self.max_tokens > 0:
             kwargs["max_tokens"] = self.max_tokens  # 截断保护
+        think = enable_thinking if enable_thinking is not None else self.enable_thinking
+        if think is not None:
+            kwargs["extra_body"] = {"enable_thinking": bool(think)}
         resp = self.client.chat.completions.create(**kwargs)
         record_llm_usage(getattr(resp, "usage", None))
         return resp.choices[0].message.content

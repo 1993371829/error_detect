@@ -70,9 +70,10 @@ class ScoringConfig:
 class DetectorConfig:
     """Stage 2 多检测器开关与关键阈值（文档 §7-§14）。
 
-    默认启用核心高召回检测器（reconstruction/statistical/categorical/neighbor/fd），
+    默认启用核心高召回检测器（reconstruction/statistical/categorical/neighbor/pattern），
     与文档"多检测器 + 证据融合"主线对齐；association/clustering 误报较高，默认关闭，
     可通过 --all-detectors 或 --detectors 选择启用。
+    fd 已前移至 Stage 1（双轨可信度），默认关闭以避免与 Stage 1 重复。
     """
 
     reconstruction: bool = True
@@ -81,17 +82,21 @@ class DetectorConfig:
     association: bool = False
     neighbor: bool = True
     clustering: bool = False
-    fd: bool = True
+    fd: bool = False
+    pattern: bool = True
     # 关键阈值
     robust_z: float = 3.0
     iqr_k: float = 1.5
     knn_k: int = 10
     sim_threshold: float = 0.85
     assoc_min_confidence: float = 0.98
+    # pattern_outlier：形态/日期格式离群
+    pattern_dominant_share: float = 0.8   # 主流形态串占比下限
+    pattern_rare_max: int = 2             # 罕见形态串的最大计数（<= 视为离群）
 
     def enabled(self) -> list[str]:
         names = ["reconstruction", "statistical", "categorical",
-                 "association", "neighbor", "clustering", "fd"]
+                 "association", "neighbor", "clustering", "fd", "pattern"]
         return [n for n in names if getattr(self, n)]
 
 

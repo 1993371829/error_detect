@@ -243,6 +243,59 @@ def flag_suspicious_cells(
     return result
 
 
+def _build_pseudo_clean(
+    x_all: np.ndarray,
+    clean_mask: pd.DataFrame,
+    specs: list[ColumnSpec],
+    clean_ref: np.ndarray,
+    *,
+    min_train_rows: int = 20,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    伪干净训练集构造（扩大可用训练行，替代"任意 1 错即整行丢弃"）。
+
+    以 clean_mask（此时仅标 high 级确定性错误）逐行统计错误数:
+        - 行内 high 错 = 0            -> 整行进训练。
+        - 行内 high 错 = 1            -> 整行进训练，但屏蔽该错误格（输入中性化 + 目标 loss 屏蔽）。
+        - 行内 high 错 >= 2           -> 整行删除（多错行上下文不可靠）。
+
+    Returns:
+        (x_target, x_input, cell_valid)
+        - x_target : 取训练目标（真值）的特征矩阵。
+        - x_input  : 上下文输入（被屏蔽格已按列类型中性化）。
+        - cell_valid: (n_keep, len(specs)) bool，按 specs 顺序对齐；False=被屏蔽格。
+    """
+    mask_bool = clean_mask.to_numpy(dtype=bool)
+    err_per_row = (~mask_bool).sum(axis=1)
+    keep = err_per_row <= 1
+
+    n_keep = int(keep.sum())
+    if n_keep < min_train_rows:
+        # 伪干净行过少（多为高错密度数据集），回退到严格整行干净行，保证可训练。
+        keep = clean_ref
+        print(f"  [pseudo-clean] 伪干净行仅 {n_keep} < {min_train_rows}，回退严格整行干净 "
+              f"{int(clean_ref.sum())} 行")
+
+    x_target = x_all[keep]
+    train_mask_df = clean_mask.loc[keep]
+    n_rows = x_target.shape[0]
+
+    # cell_valid 按 specs 顺序对齐（被屏蔽格 -> False）
+    cell_valid = np.ones((n_rows, len(specs)), dtype=bool)
+    for i, spec in enumerate(specs):
+        if spec.name in train_mask_df.columns:
+            cell_valid[:, i] = train_mask_df[spec.name].to_numpy(dtype=bool)
+
+    # 输入侧中性化被屏蔽格（复用掩码推理逻辑），打分/目标仍用真值。
+    x_input = neutralize_context(x_target, specs, train_mask_df)
+
+    n_full = int((err_per_row == 0).sum())
+    n_single = int((err_per_row == 1).sum())
+    print(f"  [pseudo-clean] 训练行 {n_rows}（整行干净 {n_full} + 单错屏蔽 {n_single}，"
+          f"多错删除 {int((err_per_row >= 2).sum())}）")
+    return x_target, x_input, cell_valid
+
+
 def _run_reconstruction(
     df, specs, x_all, clean_mask, model, *,
     quantile, margin, min_predictability, abs_prob_floor,
@@ -316,13 +369,14 @@ def run_stage2(
     encoder.fit(df, clean_mask=clean_mask)
     specs = encoder.column_specs()
 
-    row_clean = clean_mask.all(axis=1).to_numpy()
+    # clean_ref：严格整行干净行，作为 neighbor/statistical 的近邻/估参参考池（避免脏值当共识）
+    clean_ref = clean_mask.all(axis=1).to_numpy()
     x_all = encoder.transform(df)
 
     ctx = DetectorContext(
         kinds=infer_column_kinds(df, max_cardinality=max_cardinality),
         semantic_types=semantic_types or {},
-        encoder=encoder, x_all=x_all, row_clean=row_clean,
+        encoder=encoder, x_all=x_all, row_clean=clean_ref,
     )
 
     all_cands = []
@@ -331,7 +385,10 @@ def run_stage2(
     if detectors.reconstruction:
         if model is None:
             model = ConditionalPredictor()
-        model.fit(x_all[row_clean], specs)
+        x_target, x_input, cell_valid = _build_pseudo_clean(
+            x_all, clean_mask, specs, clean_ref
+        )
+        model.fit(x_target, specs, cell_valid=cell_valid, x_input=x_input)
         recon_df = _run_reconstruction(
             df, specs, x_all, clean_mask, model,
             quantile=quantile, margin=margin, min_predictability=min_predictability,
@@ -371,6 +428,15 @@ def run_stage2(
         c = detect_neighbor_consistency(df, clean_mask, ctx, k=detectors.knn_k)
         all_cands += c
         print(f"  [neighbor] {len(c)} 候选")
+    if getattr(detectors, "pattern", False):
+        from stage_2.detectors.pattern_outlier import detect_pattern_outlier
+        c = detect_pattern_outlier(
+            df, clean_mask, ctx,
+            dominant_share=detectors.pattern_dominant_share,
+            rare_max=detectors.pattern_rare_max,
+        )
+        all_cands += c
+        print(f"  [pattern] {len(c)} 候选")
     if detectors.clustering:
         from stage_2.detectors.clustering import detect_clustering
         c = detect_clustering(df, clean_mask, ctx)

@@ -5,13 +5,36 @@ Stage 3 核心：逐行调用 LLM（带缓存）对可疑单元格做精检，�
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from stage_3.cache import ResponseCache
 from stage_3.context import RowContext, SuspectCell
-from stage_3.prompt import build_prompt
+from stage_3.prompt import SYSTEM_PROMPT, SYSTEM_PROMPT_VERSION, build_user_prompt
 
 VALID_TYPES = {"MV", "DMV", "T", "VAD", "FI", "OTHER", "NONE"}
+# B3 去重：可安全按 (列,值,前序类型) 复用判定的"上下文无关"错误类型
+_CONTEXT_FREE_TYPES = {"MV", "DMV", "T", "FI"}
+
+
+def _cache_key(user_prompt: str) -> str:
+    """响应缓存键：叠加 system 版本号，模板变更时自动失效。"""
+    return f"{SYSTEM_PROMPT_VERSION}\n{user_prompt}"
+
+
+def _context_free_eligible(s: SuspectCell) -> bool:
+    """该可疑格是否可按 (列,值) 去重判定（与整行上下文无关）。
+
+    仅限确定性/单值可判类型，且不依赖分布模型/跨行共识证据，避免误伤上下文相关判定。
+    """
+    if s.auto_confirm:
+        return False
+    if _is_stage2(s) or s.consensus is not None:
+        return False
+    if s.verifiability != "verifiable":
+        return False
+    return str(s.prior_error_type).upper() in _CONTEXT_FREE_TYPES
 # 前序类型 -> 解析失败时的兜底最终类型
 _FALLBACK_TYPE = {"DIST": "OTHER", "": "OTHER"}
 # 缺证据保护：默认否决置信度门槛（低于此值且证据冲突时不允许否决）
@@ -179,49 +202,73 @@ def verify_row(
     cache: Optional[ResponseCache],
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
     protect_stage1_mv: bool = True,
+    *,
+    enable_thinking: Optional[bool] = None,
+    memo: Optional[dict] = None,
+    memo_lock: Optional[threading.Lock] = None,
 ) -> list[dict]:
     """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。
 
-    高置信确定性结构错误（auto_confirm）直接确认；若整行可疑格都是此类，
-    则跳过 LLM 调用（省成本、防误杀）。
+    - 高置信确定性结构错误（auto_confirm）直接确认；
+    - 若 memo 提供（B3 去重开启），上下文无关格命中 (列,值,类型) 记忆则复用、不进 prompt；
+    - 若整行可疑格都无需 LLM（全 auto_confirm 或全命中 memo），跳过 LLM 调用。
     """
-    llm_suspects = [s for s in ctx.suspects if not s.auto_confirm]
+    memo_hits: dict[int, dict] = {}   # ctx.suspects 下标 -> 复用的判定
+    llm_suspects = []
+    for s in ctx.suspects:
+        if s.auto_confirm:
+            continue
+        if memo is not None and _context_free_eligible(s):
+            key = (s.column, str(s.value), str(s.prior_error_type).upper())
+            cached = None
+            if memo_lock is not None:
+                with memo_lock:
+                    cached = memo.get(key)
+            else:
+                cached = memo.get(key)
+            if cached is not None:
+                memo_hits[id(s)] = cached
+                continue
+        llm_suspects.append(s)
 
-    # 纯确定性行：无需 LLM
-    if not llm_suspects:
-        results = []
-        for s in ctx.suspects:
-            norm = _auto_confirm_judgment(s)
-            norm["row_id"] = ctx.row_id
-            results.append(norm)
-        return results
-
-    # prompt 只含需 LLM 判定的可疑格：auto_confirm 格不进 prompt，
-    # 既避免 LLM 多判，又使"混合行"的 prompt 与历史（无确定性错误时）一致、命中缓存。
-    if len(llm_suspects) == len(ctx.suspects):
-        prompt_ctx = ctx
-    else:
+    by_col: dict[str, dict] = {}
+    if llm_suspects:
         prompt_ctx = RowContext(
             row_id=ctx.row_id, row_values=ctx.row_values, suspects=llm_suspects,
         )
-    prompt = build_prompt(prompt_ctx)
-    raw = cache.get(prompt) if cache else None
-    if raw is None:
-        raw = llm.complete(prompt)
-        if cache:
-            cache.set(prompt, raw)
+        user_prompt = build_user_prompt(prompt_ctx)
+        key = _cache_key(user_prompt)
+        raw = cache.get(key) if cache else None
+        if raw is None:
+            raw = llm.complete(user_prompt, system=SYSTEM_PROMPT, enable_thinking=enable_thinking)
+            if cache:
+                cache.set(key, raw)
+        by_col = _parse_response(raw)
 
-    by_col = _parse_response(raw)
     results = []
     for s in ctx.suspects:
         if s.auto_confirm:
             norm = _auto_confirm_judgment(s)
+        elif id(s) in memo_hits:
+            norm = dict(memo_hits[id(s)])  # 复用判定，替换本格标识
+            norm["column"], norm["value"] = s.column, s.value
+            norm["prior_error_type"], norm["prior_source"] = s.prior_error_type, s.prior_source
         else:
             judg = by_col.get(s.column)
             norm = (
                 _normalize(judg, s, reject_conf_threshold, protect_stage1_mv) if judg
                 else _fallback_judgment(s)
             )
+            # 记忆上下文无关格判定，供其他行的相同 (列,值,类型) 复用
+            if memo is not None and _context_free_eligible(s) and judg:
+                store = dict(norm)
+                store["row_id"] = None
+                mkey = (s.column, str(s.value), str(s.prior_error_type).upper())
+                if memo_lock is not None:
+                    with memo_lock:
+                        memo.setdefault(mkey, store)
+                else:
+                    memo.setdefault(mkey, store)
         norm["row_id"] = ctx.row_id
         results.append(norm)
     return results
@@ -234,16 +281,56 @@ def verify_contexts(
     progress_every: int = 50,
     reject_conf_threshold: float = DEFAULT_REJECT_CONF_THRESHOLD,
     protect_stage1_mv: bool = True,
+    *,
+    max_workers: int = 8,
+    enable_thinking: Optional[bool] = None,
+    dedup_context_free: bool = False,
 ) -> list[dict]:
-    """遍历所有行上下文，返回扁平的逐格判定列表。"""
-    all_results: list[dict] = []
+    """遍历所有行上下文，返回扁平的逐格判定列表（顺序与输入一致）。
+
+    max_workers>1 时用线程池并发调用 LLM（墙钟大降）；dedup_context_free 开启时
+    对上下文无关格按 (列,值,类型) 复用判定（省调用/ token，默认关闭需消融验证）。
+    """
     total = len(contexts)
-    for i, ctx in enumerate(contexts, 1):
-        all_results.extend(
-            verify_row(ctx, llm, cache, reject_conf_threshold, protect_stage1_mv)
+    memo: Optional[dict] = {} if dedup_context_free else None
+    memo_lock = threading.Lock() if dedup_context_free else None
+
+    def _run(ctx: RowContext) -> list[dict]:
+        return verify_row(
+            ctx, llm, cache, reject_conf_threshold, protect_stage1_mv,
+            enable_thinking=enable_thinking, memo=memo, memo_lock=memo_lock,
         )
-        if progress_every and (i % progress_every == 0 or i == total):
-            print(f"  [stage3] 已处理 {i}/{total} 行")
+
+    row_results: list[Optional[list[dict]]] = [None] * total
+    done = 0
+    _progress_lock = threading.Lock()
+
+    def _tick() -> None:
+        nonlocal done
+        with _progress_lock:
+            done += 1
+            d = done
+        if progress_every and (d % progress_every == 0 or d == total):
+            print(f"  [stage3] 已处理 {d}/{total} 行")
+
+    if max_workers and max_workers > 1 and total > 1:
+        from concurrent.futures import as_completed
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_run, ctx): i for i, ctx in enumerate(contexts)}
+            for fut in as_completed(futures):
+                row_results[futures[fut]] = fut.result()
+                _tick()
+    else:
+        for i, ctx in enumerate(contexts):
+            row_results[i] = _run(ctx)
+            _tick()
+
+    all_results: list[dict] = []
+    for r in row_results:
+        if r:
+            all_results.extend(r)
+    if cache is not None:
+        cache.flush()
     return all_results
 
 

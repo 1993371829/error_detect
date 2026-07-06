@@ -278,6 +278,45 @@ def filter_fds_semantically(fds: list[FunctionalDependency], llm) -> list[Functi
     return kept
 
 
+# --------------------------------------------------------------------------- #
+# 分档验证支持（二期）：子样本一致率重算 + 三档 LLM 审核 prompt
+# --------------------------------------------------------------------------- #
+
+def fd_confidence_on(df: pd.DataFrame, a_col: str, b_col: str, idx) -> Optional[float]:
+    """在给定行位置子集上重算 A->B 的全局一致率（供 bootstrap 稳定性用）。"""
+    a_vals = df[a_col].to_numpy()
+    b_vals = df[b_col].to_numpy()
+    groups: dict[str, "defaultdict[str, int]"] = defaultdict(lambda: defaultdict(int))
+    total = 0
+    for pos in idx:
+        av, bv = a_vals[pos], b_vals[pos]
+        if is_blank(av) or is_blank(bv):
+            continue
+        groups[str(av)][str(bv)] += 1
+        total += 1
+    if total == 0:
+        return None
+    agreement = sum(max(counts.values()) for counts in groups.values())
+    return agreement / total
+
+
+FD_AUDIT_PROMPT_GRADED = """你是数据质量专家。下面是从一张表中统计挖掘出的"候选函数依赖" A -> B，
+即 A 列的取值疑似能决定 B 列的取值。请判断该依赖在现实语义上的可信程度。
+
+候选依赖: {a} -> {b}
+样例映射（A 值 => B 的多数值，占比，组大小）:
+{samples}
+
+判断标准与三档输出:
+- high  : A 在概念上确实决定 B（如 ZipCode->City/State、ProviderNumber->HospitalName、
+          MeasureCode->MeasureName），该依赖真实成立，违反者应视为错误。
+- medium: 可能成立但拿不准（弱相关/部分成立/样例不足以确认），保留为弱证据但不作确定性结论。
+- drop  : 伪依赖（A 与 B 无现实因果/标识关系，仅因某列取值高度集中而"碰巧"一致）。
+
+只输出 JSON（不要任何解释）:
+{{"tier": "high|medium|drop", "reason": "简短理由"}}"""
+
+
 def detect_vad(
     df: pd.DataFrame,
     *,
@@ -315,3 +354,87 @@ def detect_vad(
         print(f"FD 语义校验: {before} 条候选 -> 保留 {len(fds)} 条")
     errors = detect_fd_violations(df, fds)
     return errors, fds
+
+
+def detect_vad_graded(
+    df: pd.DataFrame,
+    *,
+    thresholds,
+    min_confidence: float = 0.9,
+    min_group_support: int = 5,
+    min_group_confidence: float = 0.9,
+    pure_threshold: float = 0.9,
+    min_pure_group_ratio: float = 0.85,
+    min_distinct_dependents: int = 2,
+    max_determinant_unique_ratio: float = 0.5,
+    min_dependent_unique: int = 2,
+    llm=None,
+    cache=None,
+) -> list[dict]:
+    """
+    分档版 FD 检测（二期）：挖掘 FD 后逐条经统一分档验证赋 severity，再生成 VAD 错误。
+
+    每条 FD:
+        统计强 -> high（进 mask）；统计弱 -> drop；灰区 -> LLM 三档审核（high/medium/drop）。
+    产出的每个错误 dict 带 `severity` 字段，drop 的 FD 不产生错误。
+    """
+    from stage_1.rule_validation import grade_rule
+
+    fds = discover_all_fds(
+        df,
+        min_confidence=min_confidence,
+        min_group_support=min_group_support,
+        min_group_confidence=min_group_confidence,
+        pure_threshold=pure_threshold,
+        min_pure_group_ratio=min_pure_group_ratio,
+        min_distinct_dependents=min_distinct_dependents,
+        max_determinant_unique_ratio=max_determinant_unique_ratio,
+        min_dependent_unique=min_dependent_unique,
+    )
+    n_rows = len(df)
+    kept_fds: list[FunctionalDependency] = []
+    severities: dict[tuple[str, str], str] = {}
+    n_high = n_med = n_drop = 0
+    for fd in fds:
+        # 该 FD 的 support = 参与统计的非空行数（近似用组大小之和）
+        support = sum(size for _, _, size in fd.mapping.values())
+        samples = "\n".join(
+            f"  {a!r} => {dom!r} ({share:.0%}, n={size})"
+            for a, (dom, share, size) in list(fd.mapping.items())[:15]
+        )
+        prompt = FD_AUDIT_PROMPT_GRADED.format(a=fd.determinant, b=fd.dependent, samples=samples)
+        audit_profile = {
+            "_task": "fd_audit",
+            "a": fd.determinant, "b": fd.dependent,
+            "samples": samples,
+        }
+        severity, stability, reason = grade_rule(
+            support=support,
+            confidence=fd.confidence,
+            n_rows=n_rows,
+            th=thresholds,
+            recompute_confidence=lambda idx, a=fd.determinant, b=fd.dependent: fd_confidence_on(df, a, b, idx),
+            llm=llm, cache=cache,
+            audit_profile=audit_profile, audit_prompt=prompt,
+            label=f"FD {fd.determinant}->{fd.dependent}",
+        )
+        fd.semantic_reason = reason
+        if severity == "drop":
+            n_drop += 1
+            print(f"[fd-drop] {fd.determinant}->{fd.dependent}: {reason}")
+            continue
+        severities[(fd.determinant, fd.dependent)] = severity
+        kept_fds.append(fd)
+        if severity == "high":
+            n_high += 1
+        else:
+            n_med += 1
+    print(f"FD 分档: {len(fds)} 候选 -> high {n_high} / medium {n_med} / drop {n_drop}")
+
+    errors = detect_fd_violations(df, kept_fds)
+    for err in errors:
+        vr = str(err.get("violated_rule", ""))  # 形如 fd:A->B
+        a_b = vr[3:].split("->", 1) if vr.startswith("fd:") else None
+        sev = severities.get((a_b[0], a_b[1]), "medium") if a_b and len(a_b) == 2 else "medium"
+        err["severity"] = sev
+    return errors

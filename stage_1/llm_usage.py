@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+# 并发（Stage 3 线程池）下多线程同时累加用量文件，需串行化读改写，避免相互覆盖/损坏。
+_USAGE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -81,13 +85,17 @@ def init_usage_file(path: Path) -> None:
 
 
 def record_llm_usage(usage: Any) -> None:
-    """每次 LLM API 调用后累加 token（无 LLM_USAGE_FILE 时静默跳过）。"""
+    """每次 LLM API 调用后累加 token（无 LLM_USAGE_FILE 时静默跳过）。
+
+    加锁串行化「读-改-写」，保证 Stage 3 线程池并发下用量统计不丢失、不损坏。
+    """
     path = usage_file_path()
     if path is None:
         return
-    stats = LLMUsageStats.load(path)
-    stats.add(usage)
-    stats.save(path)
+    with _USAGE_LOCK:
+        stats = LLMUsageStats.load(path)
+        stats.add(usage)
+        stats.save(path)
 
 
 def load_usage(path: Path) -> LLMUsageStats:

@@ -9,6 +9,10 @@ llm:
   temperature: 0                   # 规则归纳需要稳定输出
   max_tokens: 4096                 # 输出上限，防高基数自由文本列 JSON 被截断（0=不显式传）
   max_retries: 1                   # JSON 解析/接口调用失败时的额外重试次数
+  # 思考模式（qwen3 等推理模型）：null=不干预服务商默认(通常开启思考)；
+  # false=关闭思考(省 completion token)；true=强制开启。仅经 extra_body 传给 qwen，非 qwen 模型忽略。
+  # 该项控制 Stage 1 的全部 LLM 调用（规则归纳 + 各检测器语义校验 + FD/CFD/DC 审核）。
+  enable_thinking: null
 
 # 数据画像参数
 profiling:
@@ -63,7 +67,60 @@ execution:
     robust_z: 6.0                  # Robust-Z 阈值（远高于 Stage 2 的 3.0）
     iqr_k: 4.5                     # IQR 系数（越大越保守）
     detect_dates: true            # 对可解析日期列检测过早/未来等离群日期
-  # 注：Typo / 主导格式(format_outlier) / 近似函数依赖(FD) 已迁移至 Stage 2 多检测器层。
+  # 规则分档验证阈值（二期，FD/CFD/DC 共用，见 stage_1/rule_validation.py）：
+  #   统计强(高支持+高一致率+高稳定) -> high（跳过 LLM，省 token）；
+  #   统计弱 -> drop；灰区 -> LLM 三档审核（high/medium/drop）。
+  validation:
+    high_min_support: 50
+    high_min_confidence: 0.95
+    high_min_stability: 0.9
+    drop_max_support: 10
+    drop_max_confidence: 0.8
+    bootstrap_rounds: 30
+    bootstrap_ratio: 0.8
+    stability_conf_floor: 0.9
+  # 近似函数依赖(FD)违反检测（前移至 Stage 1，二期经统一分档验证输出双轨 severity）：
+  #   graded=true -> 统计强直接 high、灰区 LLM 三档审核、统计弱 drop；graded=false 退回一期二元。
+  fd:
+    enabled: true
+    graded: true                   # 使用分档验证（推荐）；false 退回一期二元语义校验
+    semantic_check: true           # graded=false 时的旧二元语义校验开关
+    min_confidence: 0.9
+    min_group_support: 5
+    min_group_confidence: 0.9
+    pure_threshold: 0.9
+    min_pure_group_ratio: 0.85
+    min_distinct_dependents: 2
+    max_determinant_unique_ratio: 0.5
+    min_dependent_unique: 2
+  # 条件函数依赖(CFD)（二期）：仅挖全局 FD 漏掉的条件化依赖，对 FD 强制去冗余（min_gain 闸门）。
+  cfd:
+    enabled: true
+    max_condition_cardinality: 20  # 条件列最大基数（低基数类别列才作条件）
+    top_condition_values: 10       # 每个条件列取 Top-K 高频取值作条件
+    min_subset_support: 30         # 条件子集最小行数
+    min_gain: 0.1                  # 条件版一致率较全局 FD 的最小提升（去冗余）
+    min_confidence: 0.95           # 条件子集内 FD 最低一致率
+    enable_constant_cfd: true      # (X=x)=>B=const 常量 CFD
+  # 否定约束(DC)（二期）：仅非等值谓词——算术/排序/比较/时序，FD/CFD 表达不了的约束。
+  dc:
+    enabled: true
+    min_support: 30
+    max_violation_rate: 0.02
+    enable_arith: true             # LLM 归纳的跨列算术约束（需 LLM）
+    enable_order: true             # 排序单调一致性（rank 与度量列）
+    enable_compare: true           # 跨列比较（start<=end / min<=max 等）
+    enable_temporal: true          # 年份合理区间
+  # 注：Typo / 主导格式(format_outlier) 已迁移至 Stage 2 多检测器层；FD/CFD/DC 在 Stage 1（见上）。
+
+# Stage 3 精检层参数（LLM 语义确认/修复）。优先级: CLI > 本段 > 代码默认值。
+stage3:
+  # 思考模式（qwen3 等推理模型）：false=关闭思考(省 completion token，推荐)；
+  # null=服务商默认(通常开启)；true=强制开启。与上面 llm.enable_thinking 相互独立，仅管 Stage 3。
+  enable_thinking: false
+  max_workers: 8                   # LLM 并发调用线程数（受服务商 RPM/TPM 限流约束）
+  dedup_context_free: false        # 上下文无关格(MV/DMV/FI/T)按(列,值)复用判定（需消融验证召回不掉）
+  min_tier: low                    # 仅精检 confidence_tier >= 该层级的候选（low=全部）
 
 # 目录布局：data/ 仅原始数据；生成物写入 output/ 子目录
 layout:

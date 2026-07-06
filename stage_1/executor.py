@@ -42,9 +42,10 @@ from stage_1.xcol_detect import (
 )
 
 # 错误记录统一字段顺序（规则类不填 suggested_fix/confidence）
+# severity: 双轨可信度分级——high 进 clean_mask（净化训练分布），medium 仅作弱证据不进 mask。
 ERROR_COLUMNS = [
     "row_id", "column", "value", "error_type",
-    "violated_rule", "reason", "suggested_fix", "confidence",
+    "violated_rule", "reason", "suggested_fix", "confidence", "severity",
 ]
 
 # 可执行类型一致性校验的逻辑类型（其余如 categorical/string 不触发校验）
@@ -297,9 +298,31 @@ def run_rule_layer(
     _append_xcol_errors(df, config, all_errors, flagged_cells, llm, cache)
     _append_arith_errors(df, config, all_errors, flagged_cells, llm)
     _append_statistical_extreme_errors(df, config, all_errors, flagged_cells, semantic_types)
+    # 规则族（FD/CFD/DC）先收集到独立 sink，不互相去重，供冲突消解按优先级择一。
+    # 它们仍跳过已被确定性检测器标记的单元格（flagged_cells），但不写回该集合。
+    rule_family_errors: list = []
+    # FD 前移：近似函数依赖违反（VAD），经统一分档验证输出双轨 severity。
+    _append_fd_errors(df, config, rule_family_errors, flagged_cells, llm, cache)
+    # CFD：仅挖全局 FD 漏掉的条件化依赖（对 FD 去冗余），经分档验证输出双轨 VAD。
+    _append_cfd_errors(df, config, rule_family_errors, flagged_cells, llm, cache)
+    # DC：仅非等值谓词（算术/排序/比较/时序），FD/CFD 结构上表达不了的约束。
+    _append_dc_errors(df, config, rule_family_errors, flagged_cells, llm)
+    # 规则冲突消解：同单元格多族结论按优先级择一，无法判定者降 medium（不进 mask）。
+    from stage_1.rule_conflict import resolve_rule_conflicts
+    for err in resolve_rule_conflicts(rule_family_errors):
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        all_errors.append(err)
+        flagged_cells.add(cell)
 
     errors_df = pd.DataFrame(all_errors)
     if not errors_df.empty:
+        # 未显式标注 severity 的记录（既有高精度确定性检测器）默认 high。
+        if "severity" not in errors_df.columns:
+            errors_df["severity"] = "high"
+        else:
+            errors_df["severity"] = errors_df["severity"].fillna("high")
         errors_df = errors_df.reindex(columns=ERROR_COLUMNS)
     return errors_df, rule_report
 
@@ -457,6 +480,157 @@ def _append_statistical_extreme_errors(
     print(f"极端统计检测新增 {added} 个候选错误 (FI/extreme_outlier)")
 
 
+def _grade_thresholds(config: Stage1Config):
+    """从配置构造规则分档阈值（FD/CFD/DC 共用）。"""
+    from stage_1.rule_validation import GradeThresholds
+    v = config.execution.validation
+    return GradeThresholds(
+        high_min_support=v.high_min_support,
+        high_min_confidence=v.high_min_confidence,
+        high_min_stability=v.high_min_stability,
+        drop_max_support=v.drop_max_support,
+        drop_max_confidence=v.drop_max_confidence,
+        bootstrap_rounds=v.bootstrap_rounds,
+        bootstrap_ratio=v.bootstrap_ratio,
+        stability_conf_floor=v.stability_conf_floor,
+    )
+
+
+def _append_fd_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    llm=None,
+    cache=None,
+) -> None:
+    """
+    近似函数依赖(FD)违反检测，前移至 Stage 1，经统一分档验证输出双轨 severity：
+
+        - 统计强（高支持 + 高一致率 + 高稳定）-> high（进 clean_mask）。
+        - 灰区 -> LLM 三档审核（high/medium/drop）。
+        - 统计弱 -> drop（不产生错误）。
+
+    graded=False 时退回一期二元逻辑（语义确认 high / 纯统计 medium）。
+    沿用 flagged_cells 去重，规则层已标记的单元格不重复标记。
+    """
+    fc = config.execution.fd
+    if not fc.enabled:
+        return
+
+    if fc.graded:
+        from stage_1.fd_detect import detect_vad_graded
+
+        vad_errors = detect_vad_graded(
+            df,
+            thresholds=_grade_thresholds(config),
+            min_confidence=fc.min_confidence,
+            min_group_support=fc.min_group_support,
+            min_group_confidence=fc.min_group_confidence,
+            pure_threshold=fc.pure_threshold,
+            min_pure_group_ratio=fc.min_pure_group_ratio,
+            min_distinct_dependents=fc.min_distinct_dependents,
+            max_determinant_unique_ratio=fc.max_determinant_unique_ratio,
+            min_dependent_unique=fc.min_dependent_unique,
+            llm=llm,
+            cache=cache,
+        )
+        added = 0
+        for err in vad_errors:
+            cell = (err["row_id"], err["column"])
+            if cell in flagged_cells:
+                continue
+            all_errors.append(err)
+            added += 1
+        print(f"函数依赖检测新增 {added} 个候选错误 (VAD, 分档验证)")
+        return
+
+    # 退回一期二元逻辑
+    from stage_1.fd_detect import detect_vad
+
+    semantic = fc.semantic_check and llm is not None
+    vad_errors, _ = detect_vad(
+        df,
+        min_confidence=fc.min_confidence,
+        min_group_support=fc.min_group_support,
+        min_group_confidence=fc.min_group_confidence,
+        pure_threshold=fc.pure_threshold,
+        min_pure_group_ratio=fc.min_pure_group_ratio,
+        min_distinct_dependents=fc.min_distinct_dependents,
+        max_determinant_unique_ratio=fc.max_determinant_unique_ratio,
+        min_dependent_unique=fc.min_dependent_unique,
+        llm=llm,
+        semantic_check=semantic,
+    )
+    severity = "high" if semantic else "medium"
+    added = 0
+    for err in vad_errors:
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        err["severity"] = severity
+        all_errors.append(err)
+        added += 1
+    print(f"函数依赖检测新增 {added} 个候选错误 (VAD, severity={severity})")
+
+
+def _append_cfd_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    llm=None,
+    cache=None,
+) -> None:
+    """
+    条件函数依赖(CFD)检测：只挖全局 FD 漏掉的条件化依赖（去冗余闸门内建于 cfd_detect），
+    经统一分档验证输出双轨 severity。沿用 flagged_cells 去重。
+    """
+    cc = config.execution.cfd
+    if not cc.enabled:
+        return
+    from stage_1.cfd_detect import detect_cfd_graded
+
+    cfd_errors = detect_cfd_graded(
+        df, cfg=cc, thresholds=_grade_thresholds(config), llm=llm, cache=cache,
+    )
+    added = 0
+    for err in cfd_errors:
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        all_errors.append(err)
+        added += 1
+    print(f"条件依赖检测新增 {added} 个候选错误 (CFD/VAD)")
+
+
+def _append_dc_errors(
+    df: pd.DataFrame,
+    config: Stage1Config,
+    all_errors: list,
+    flagged_cells: set,
+    llm=None,
+) -> None:
+    """
+    否定约束(DC)检测：仅非等值谓词（算术/排序/比较/时序），FD/CFD 表达不了的结构约束。
+    沿用 flagged_cells 去重。
+    """
+    dc = config.execution.dc
+    if not dc.enabled:
+        return
+    from stage_1.dc_detect import detect_dc
+
+    dc_errors = detect_dc(df, cfg=dc, thresholds=_grade_thresholds(config), llm=llm)
+    added = 0
+    for err in dc_errors:
+        cell = (err["row_id"], err["column"])
+        if cell in flagged_cells:
+            continue
+        all_errors.append(err)
+        added += 1
+    print(f"否定约束检测新增 {added} 个候选错误 (DC: FI/VAD)")
+
+
 def _append_range_errors(
     df: pd.DataFrame,
     config: Stage1Config,
@@ -592,11 +766,20 @@ def build_clean_mask(df: pd.DataFrame, errors_df: pd.DataFrame) -> pd.DataFrame:
     """
     生成与 df 同形状的布尔掩码: True 表示该单元格未被任何检测器标记(干净)。
 
+    双轨策略：仅 severity==high（高可信确定性错误）的单元格进 mask（置 False），
+    medium 级（如纯统计近似 FD）不进 mask，避免用从脏数据挖出、易过报的规则
+    污染 Stage 2 的训练分布。缺失 severity 视为 high（向后兼容既有产物）。
+
     供 Stage 2 在干净子集上训练分布模型使用。
     """
     mask = pd.DataFrame(True, index=df.index, columns=df.columns)
     if errors_df is not None and not errors_df.empty:
-        for row_id, col in zip(errors_df["row_id"], errors_df["column"]):
+        if "severity" in errors_df.columns:
+            sev = errors_df["severity"].fillna("high").astype(str).str.strip().str.lower()
+            high_errors = errors_df[sev != "medium"]
+        else:
+            high_errors = errors_df
+        for row_id, col in zip(high_errors["row_id"], high_errors["column"]):
             if row_id in mask.index and col in mask.columns:
                 mask.at[row_id, col] = False
     return mask

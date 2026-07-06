@@ -73,10 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default=None, choices=["auto", "cpu", "cuda"],
                         help="计算设备：auto（默认，有 GPU 自动用）/ cuda / cpu")
     parser.add_argument("--all-detectors", action="store_true",
-                        help="启用全部 Stage2 检测器（统计/低频拼写/关联/近似FD/近邻/聚类/重构）")
+                        help="启用全部 Stage2 检测器（重构/统计/低频拼写/关联/近似FD/近邻/聚类/形态离群）")
     parser.add_argument("--detectors", default=None,
                         help="逗号分隔指定启用的检测器，覆盖默认；可选: "
-                             "reconstruction,statistical,categorical,association,fd,neighbor,clustering")
+                             "reconstruction,statistical,categorical,association,fd,neighbor,clustering,pattern")
     return parser
 
 
@@ -124,7 +124,7 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.model.device = args.device
 
     _ALL = ["reconstruction", "statistical", "categorical",
-            "association", "fd", "neighbor", "clustering"]
+            "association", "fd", "neighbor", "clustering", "pattern"]
     if args.all_detectors:
         for name in _ALL:
             setattr(cfg.detectors, name, True)

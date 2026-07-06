@@ -24,16 +24,43 @@ _WEIGHTS = {
     "strong_rule": 1.0,
     "approx_fd": 0.9,
     "fd": 0.9,
+    "approx_fd_medium": 0.5,   # 双轨 medium 级 FD：仅作弱证据（不进 mask，融合权重降低）
     "reconstruction": 0.85,
     "association_rule": 0.8,
     "categorical_typo": 0.8,
     "typo": 0.8,
     "neighbor_consistency": 0.75,
+    "pattern_outlier": 0.6,
     "statistical": 0.6,
     "format_cluster": 0.6,
     "clustering": 0.4,
 }
 _DEFAULT_WEIGHT = 0.6
+
+# 检测器 -> 证据"族"。独立族数（family_count）衡量多源一致程度：跨族命中越多，
+# 越可能是真错（供 Stage 3 优先保留，缓解精检后召回下降）。同族内多个检测器高度相关，
+# 只算 1 次，避免"同质证据堆叠"虚高。
+_DETECTOR_FAMILY = {
+    "strong_rule": "rule",
+    "approx_fd": "rule",
+    "approx_fd_medium": "rule",
+    "fd": "rule",
+    "association_rule": "rule",
+    "reconstruction": "model",
+    "statistical": "statistical",
+    "clustering": "statistical",
+    "neighbor_consistency": "neighbor",
+    "pattern_outlier": "pattern",
+    "format_cluster": "pattern",
+    "typo": "text",
+    "categorical_typo": "text",
+}
+_DEFAULT_FAMILY = "other"
+
+
+def _family(detector: str) -> str:
+    return _DETECTOR_FAMILY.get(detector, _DEFAULT_FAMILY)
+
 
 _TIER_HIGH = 0.85
 _TIER_MID = 0.60
@@ -44,10 +71,12 @@ def _stage1_detector(row: pd.Series) -> str:
     """Stage1 错误 -> 统一 detector 名（供权重/证据展示）。"""
     vr = str(row.get("violated_rule", "") or "")
     et = str(row.get("error_type", "") or "").upper()
+    sev = str(row.get("severity", "high") or "high").strip().lower()
     if et in ("T",):
         return "typo"
     if vr.startswith("fd:") or et == "VAD":
-        return "approx_fd"
+        # 双轨：medium 级 FD 仅作弱证据（降低融合权重）
+        return "approx_fd_medium" if sev == "medium" else "approx_fd"
     return "strong_rule"
 
 
@@ -143,6 +172,7 @@ def fuse_candidates(
             "row_id", "column", "value", "error_type", "violated_rule", "reason",
             "suggested_fix", "confidence", "anomaly_score", "subtype", "source",
             "suspicion_score", "confidence_tier", "evidence", "candidate_fixes", "detectors",
+            "families", "family_count",
         ])
     _normalize_scores(records)
 
@@ -186,6 +216,8 @@ def fuse_candidates(
             f"[{e['detector']}] {str(e.get('reason') or '')}".strip() for e in evs
         )
         detectors = ",".join(sorted(best_by_det.keys()))
+        families = sorted({_family(d) for d in best_by_det})
+        family_count = len(families)
 
         out_rows.append({
             "row_id": int(row_id), "column": col,
@@ -203,6 +235,8 @@ def fuse_candidates(
             "evidence": evidence_text,
             "candidate_fixes": "; ".join(fixes),
             "detectors": detectors,
+            "families": ",".join(families),
+            "family_count": family_count,
         })
     out = pd.DataFrame(out_rows)
     out = out.sort_values(["row_id", "column"]).reset_index(drop=True)

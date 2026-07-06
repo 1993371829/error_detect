@@ -47,6 +47,8 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
 4. 若提供 multi_detector_evidence（多检测器证据融合）:
    - detectors 列出命中本格的检测器；命中越多、suspicion_score 越高、confidence_tier 越高，
      越可能是真错误。多个独立检测器一致指向同一格时应提高判定为错误的把握。
+   - independent_family_count 为命中的**独立证据族**数（规则/模型/统计/近邻/模式/文本）：
+     跨族一致比同族多个检测器更有力，该值 >=2 时应显著提高判定为错误的把握。
    - candidate_fixes 汇总各检测器给出的候选修复值，可作为 suggested_fix 的参考。
 5. 对确实是错误的，请给出标准化的正确值 suggested_fix（old->new 映射思路）:
    - 优先映射到该列 value_frequencies / normal_samples 中已存在的规范表示
@@ -68,10 +70,15 @@ OUTPUT_SPEC = """## 输出（只输出 JSON，不要任何解释）
       "error_type": "MV|DMV|T|VAD|FI|OTHER|NONE",
       "confidence": 0.0,
       "suggested_fix": "标准化后的正确值，或 null",
-      "reason": "简短理由"
+      "reason": "≤15字极简理由"
     }
   ]
 }"""
+
+# 静态系统提示词：任务说明 + 输出规范，跨行完全一致 -> 放入 system 消息命中前缀缓存。
+# 版本号：模板变更时改此值，使响应缓存键失效，避免复用旧 prompt 的结果。
+SYSTEM_PROMPT_VERSION = "v2"
+SYSTEM_PROMPT = f"{PROMPT_HEADER}\n{OUTPUT_SPEC}"
 
 
 def _format_suspects(ctx: RowContext) -> list[dict]:
@@ -97,6 +104,8 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
             }
             if s.suspicion_score is not None:
                 fusion["suspicion_score"] = round(float(s.suspicion_score), 3)
+            if s.family_count:
+                fusion["independent_family_count"] = s.family_count
             if s.fused_evidence:
                 fusion["evidence"] = s.fused_evidence
             if s.candidate_fixes:
@@ -128,13 +137,16 @@ def _format_suspects(ctx: RowContext) -> list[dict]:
     return items
 
 
-def build_prompt(ctx: RowContext) -> str:
-    """渲染单行的精检 prompt。"""
+def build_user_prompt(ctx: RowContext) -> str:
+    """渲染单行的动态 user 部分（整行数据 + 可疑单元格），静态说明见 SYSTEM_PROMPT。"""
     row_json = json.dumps(ctx.row_values, ensure_ascii=False, indent=2, default=str)
     suspects_json = json.dumps(_format_suspects(ctx), ensure_ascii=False, indent=2, default=str)
     return (
-        f"{PROMPT_HEADER}\n"
         f"## 整行数据 (row_id={ctx.row_id})\n{row_json}\n\n"
-        f"## 可疑单元格（共 {len(ctx.suspects)} 个）\n{suspects_json}\n\n"
-        f"{OUTPUT_SPEC}"
+        f"## 可疑单元格（共 {len(ctx.suspects)} 个）\n{suspects_json}"
     )
+
+
+def build_prompt(ctx: RowContext) -> str:
+    """完整 prompt（system + user 拼接），供 dry-run 预览与向后兼容。"""
+    return f"{SYSTEM_PROMPT}\n{build_user_prompt(ctx)}"
