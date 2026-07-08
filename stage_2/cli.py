@@ -76,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="启用全部 Stage2 检测器（重构/统计/低频拼写/关联/近似FD/近邻/聚类/形态离群）")
     parser.add_argument("--detectors", default=None,
                         help="逗号分隔指定启用的检测器，覆盖默认；可选: "
-                             "reconstruction,statistical,categorical,association,fd,neighbor,clustering,pattern")
+                             "reconstruction,statistical,categorical,association,fd,neighbor,clustering,pattern,numeric_format")
     return parser
 
 
@@ -124,7 +124,8 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.model.device = args.device
 
     _ALL = ["reconstruction", "statistical", "categorical",
-            "association", "fd", "neighbor", "clustering", "pattern"]
+            "association", "fd", "neighbor", "clustering", "pattern",
+            "numeric_format"]
     if args.all_detectors:
         for name in _ALL:
             setattr(cfg.detectors, name, True)

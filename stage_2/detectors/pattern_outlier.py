@@ -111,12 +111,15 @@ def detect_pattern_outlier(
         dom_share = dom_c / pat_total
 
         is_date = _looks_like_date(col, ctx, clean_vals)
-        # 非日期列若无强主流形态（自由文本/多形态并存），跳过以控误报。
-        if not is_date and dom_share < dominant_share:
+        # 关键修复：无强主流形态（自由文本 / 多合法格式并存，如 '8 September 1960 (USA)'）一律跳过。
+        # 日期列同样受此闸门约束——此前日期列绕过该闸门，导致主流占比极低(如 14%)的多格式日期列
+        # 整列被判"格式不符"，制造海量误报。只有形态确实统一(dom_share 达标)的列才做离群判定。
+        if dom_share < dominant_share:
             continue
 
         # 日期列缓存逐值解析结果，避免重复解析同一取值
         parse_cache: dict[str, bool] = {}
+        subtype = "date" if is_date else "shape"
         for pos in range(n):
             val = series.iloc[pos]
             if is_blank(val):
@@ -124,36 +127,34 @@ def detect_pattern_outlier(
             val = str(val)
             pat = _shape(val)
 
-            if is_date:
-                if val not in parse_cache:
-                    parse_cache[val] = _parseable_date(val)
-                ok = (pat == dom_pat) and parse_cache[val]
-                if ok:
-                    continue
-                reason = "日期格式不符主流" if pat != dom_pat else "不可解析为有效日期"
-                cands.append(CandidateError(
-                    row_id=int(df.index[pos]), column=col, value=val,
-                    detector="pattern_outlier", error_type="FI",
-                    score=0.85,
-                    evidence=f"{reason}：'{val}' 形态 '{pat}'，主流 '{dom_pat}'({dom_share:.0%})",
-                    suggested_fix=None,
-                    metadata={"pattern": pat, "dominant": dom_pat, "subtype": "date"},
-                ))
+            if pat == dom_pat:
+                # 形态与主流一致：日期列再校验可解析性（形态对但内容非法日期）。
+                if is_date:
+                    if val not in parse_cache:
+                        parse_cache[val] = _parseable_date(val)
+                    if not parse_cache[val]:
+                        cands.append(CandidateError(
+                            row_id=int(df.index[pos]), column=col, value=val,
+                            detector="pattern_outlier", error_type="FI", score=0.85,
+                            evidence=f"不可解析为有效日期：'{val}' 形态 '{pat}'，主流 "
+                                     f"'{dom_pat}'({dom_share:.0%})",
+                            suggested_fix=None,
+                            metadata={"pattern": pat, "dominant": dom_pat, "subtype": subtype},
+                        ))
                 continue
 
-            # 非日期列：形态罕见且不等于主流 -> 候选
-            if pat == dom_pat:
-                continue
+            # 形态与主流不同：仅当该形态罕见（cnt <= rare_max）才作候选，控误报。
             cnt = pat_counts.get(pat, 0)
             if cnt > rare_max:
                 continue
             score = 1.0 - cnt / pat_total
+            reason = "日期格式不符主流" if is_date else "罕见形态"
             cands.append(CandidateError(
                 row_id=int(df.index[pos]), column=col, value=val,
                 detector="pattern_outlier", error_type="FI",
-                score=float(score),
-                evidence=f"罕见形态 '{pat}'(计数 {cnt})，主流 '{dom_pat}'({dom_share:.0%})",
+                score=float(max(score, 0.6)),
+                evidence=f"{reason} '{pat}'(计数 {cnt})，主流 '{dom_pat}'({dom_share:.0%})",
                 suggested_fix=None,
-                metadata={"pattern": pat, "dominant": dom_pat, "subtype": "shape"},
+                metadata={"pattern": pat, "dominant": dom_pat, "subtype": subtype},
             ))
     return cands

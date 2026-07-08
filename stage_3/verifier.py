@@ -240,10 +240,17 @@ def verify_row(
         key = _cache_key(user_prompt)
         raw = cache.get(key) if cache else None
         if raw is None:
-            raw = llm.complete(user_prompt, system=SYSTEM_PROMPT, enable_thinking=enable_thinking)
-            if cache:
+            # 单行 LLM 调用失败（内容审查 400 / 限流 / 网络等）不应拖垮整个并发精检：
+            # 捕获后对本行回退前序判定（保住召回），继续处理其余行。
+            try:
+                raw = llm.complete(user_prompt, system=SYSTEM_PROMPT, enable_thinking=enable_thinking)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [stage3][warn] row {ctx.row_id} LLM 调用失败，回退前序判定："
+                      f"{type(exc).__name__}: {str(exc)[:120]}")
+                raw = None
+            if raw is not None and cache:
                 cache.set(key, raw)
-        by_col = _parse_response(raw)
+        by_col = _parse_response(raw) if raw is not None else {}
 
     results = []
     for s in ctx.suspects:

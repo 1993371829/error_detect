@@ -84,6 +84,7 @@ class DetectorConfig:
     clustering: bool = False
     fd: bool = False
     pattern: bool = True
+    numeric_format: bool = True
     # 关键阈值
     robust_z: float = 3.0
     iqr_k: float = 1.5
@@ -91,12 +92,20 @@ class DetectorConfig:
     sim_threshold: float = 0.85
     assoc_min_confidence: float = 0.98
     # pattern_outlier：形态/日期格式离群
-    pattern_dominant_share: float = 0.8   # 主流形态串占比下限
+    pattern_dominant_share: float = 0.8   # 主流形态串占比下限（日期列同样受此闸门约束）
     pattern_rare_max: int = 2             # 罕见形态串的最大计数（<= 视为离群）
+    # numeric_format：数值列元数(数值 token 个数)一致性，捕捉"单值->多值/带分隔符"格式违规
+    numeric_format_min_share: float = 0.9  # 主导 token 个数占比下限（保精度，放过天然多 token 列）
+    # reconstruction 伪干净训练：统一纳入整行干净行 + 恰含 1 个检出错误的行(屏蔽该错误格的
+    # 输入与损失)，含 >=2 检出错误的行剔除。6 数据集消融显示其在干净行稀缺时(如 hospital)显著
+    # 优于纯干净训练、数据充足时(如 movies)等价，故统一默认开启，无需按数据集分档。
+    # 关闭(False)则退回纯严格整行干净训练。
+    reconstruction_pseudo_clean: bool = True
 
     def enabled(self) -> list[str]:
         names = ["reconstruction", "statistical", "categorical",
-                 "association", "neighbor", "clustering", "fd", "pattern"]
+                 "association", "neighbor", "clustering", "fd", "pattern",
+                 "numeric_format"]
         return [n for n in names if getattr(self, n)]
 
 

@@ -385,10 +385,15 @@ def run_stage2(
     if detectors.reconstruction:
         if model is None:
             model = ConditionalPredictor()
-        x_target, x_input, cell_valid = _build_pseudo_clean(
-            x_all, clean_mask, specs, clean_ref
-        )
-        model.fit(x_target, specs, cell_valid=cell_valid, x_input=x_input)
+        # 统一采用伪干净训练（整行干净 + 单错屏蔽行）；关闭时退回纯严格整行干净。
+        if getattr(detectors, "reconstruction_pseudo_clean", True):
+            x_target, x_input, cell_valid = _build_pseudo_clean(
+                x_all, clean_mask, specs, clean_ref
+            )
+            model.fit(x_target, specs, cell_valid=cell_valid, x_input=x_input)
+        else:
+            print(f"  [pseudo-clean] 已禁用，用严格整行干净 {int(clean_ref.sum())} 行训练重构模型")
+            model.fit(x_all[clean_ref], specs)
         recon_df = _run_reconstruction(
             df, specs, x_all, clean_mask, model,
             quantile=quantile, margin=margin, min_predictability=min_predictability,
@@ -437,6 +442,14 @@ def run_stage2(
         )
         all_cands += c
         print(f"  [pattern] {len(c)} 候选")
+    if getattr(detectors, "numeric_format", False):
+        from stage_2.detectors.numeric_format import detect_numeric_format
+        c = detect_numeric_format(
+            df, clean_mask, ctx,
+            min_dominant_share=detectors.numeric_format_min_share,
+        )
+        all_cands += c
+        print(f"  [numeric_format] {len(c)} 候选")
     if detectors.clustering:
         from stage_2.detectors.clustering import detect_clustering
         c = detect_clustering(df, clean_mask, ctx)

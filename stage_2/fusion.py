@@ -31,6 +31,7 @@ _WEIGHTS = {
     "typo": 0.8,
     "neighbor_consistency": 0.75,
     "pattern_outlier": 0.6,
+    "numeric_format": 0.85,   # 数值元数违规：规则性强、高精度
     "statistical": 0.6,
     "format_cluster": 0.6,
     "clustering": 0.4,
@@ -52,6 +53,7 @@ _DETECTOR_FAMILY = {
     "neighbor_consistency": "neighbor",
     "pattern_outlier": "pattern",
     "format_cluster": "pattern",
+    "numeric_format": "format",
     "typo": "text",
     "categorical_typo": "text",
 }
