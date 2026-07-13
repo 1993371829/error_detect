@@ -10,6 +10,8 @@ numeric_format 检测器消融：off vs on，候选层(合并 S1+S2) P/R/F1，�
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -58,10 +60,8 @@ def _run_combined(dataset: str, variant_kwargs: dict) -> pd.DataFrame:
         max_cells_per_row=cfg.scoring.max_cells_per_row,
         masked_inference=cfg.scoring.masked_inference,
         masked_inference_iters=cfg.scoring.masked_inference_iters,
-        cdf_normalize=cfg.scoring.cdf_normalize,
         detectors=cfg.detectors,
         semantic_types=semantic_types,
-        llm=None,
     )
 
     s1_path = Path(cfg.paths.stage1_errors)
@@ -111,6 +111,13 @@ def main(argv: list[str] | None = None) -> None:
               f"   {n['precision']:.3f}/{n['recall']:.3f}/{n['f1']:.3f}     "
               f"{d_f1:+8.3f}")
     print("=" * 96)
+
+    out_dir = Path("output/runs")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"ablate_numfmt_{datetime.now():%Y%m%d_%H%M%S}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+    print(f"消融结果已写入 {out_path}")
 
 
 if __name__ == "__main__":

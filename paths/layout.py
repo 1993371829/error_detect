@@ -120,7 +120,9 @@ def resolve_dataset_paths(
         stage3_results=_p(lay.stage3_dir, f"{name}_stage3_results.csv"),
         final_errors=_p(lay.stage3_dir, f"{name}_final_errors.csv"),
         rule_cache=cache_dir / "rule_cache.json",
-        stage3_cache=cache_dir / "stage3_cache.json",
+        # 按数据集拆分 Stage 3 响应缓存，与 run_pipeline 的默认一致（避免路径双标准
+        # 导致"以为有缓存实际 miss"），也避免单一巨型缓存文件。
+        stage3_cache=cache_dir / f"{name}_stage3_cache.json",
     )
 
 

@@ -20,7 +20,6 @@ def recon_frame_to_candidates(recon: pd.DataFrame) -> list[CandidateError]:
     cands: list[CandidateError] = []
     for _, r in recon.iterrows():
         score = float(r.get("anomaly_score", 0.0) or 0.0)
-        norm = r.get("norm_score", score)
         fix = r.get("suggested_fix")
         fix = None if (fix is None or (isinstance(fix, float) and pd.isna(fix)) or fix == "") else fix
         cands.append(CandidateError(
@@ -29,6 +28,6 @@ def recon_frame_to_candidates(recon: pd.DataFrame) -> list[CandidateError]:
             score=score,
             evidence=f"条件预测异常分 {score:.3g}（子类 {r.get('subtype', '')}）",
             suggested_fix=fix,
-            metadata={"subtype": str(r.get("subtype", "") or ""), "norm_score": float(norm)},
+            metadata={"subtype": str(r.get("subtype", "") or "")},
         ))
     return cands

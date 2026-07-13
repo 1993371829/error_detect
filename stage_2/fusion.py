@@ -17,16 +17,14 @@ import numpy as np
 import pandas as pd
 
 # 软检测器：原始分是 z-score / -logP 等无界量纲，用分位归一化到 [0,1]
-_SOFT_DETECTORS = {"reconstruction", "statistical", "neighbor_consistency", "clustering"}
+_SOFT_DETECTORS = {"reconstruction", "statistical", "neighbor_consistency"}
 
 # 检测器权重（文档 §15.3）
 _WEIGHTS = {
     "strong_rule": 1.0,
     "approx_fd": 0.9,
-    "fd": 0.9,
     "approx_fd_medium": 0.5,   # 双轨 medium 级 FD：仅作弱证据（不进 mask，融合权重降低）
     "reconstruction": 0.85,
-    "association_rule": 0.8,
     "categorical_typo": 0.8,
     "typo": 0.8,
     "neighbor_consistency": 0.75,
@@ -34,7 +32,8 @@ _WEIGHTS = {
     "numeric_format": 0.85,   # 数值元数违规：规则性强、高精度
     "statistical": 0.6,
     "format_cluster": 0.6,
-    "clustering": 0.4,
+    "value_burst": 0.6,      # 异常高频重复值：低权重进融合，交 Stage 3 裁决
+    "secondary_format": 0.5,  # 次级日期格式簇：低权重，交 Stage 3 裁决
 }
 _DEFAULT_WEIGHT = 0.6
 
@@ -45,17 +44,16 @@ _DETECTOR_FAMILY = {
     "strong_rule": "rule",
     "approx_fd": "rule",
     "approx_fd_medium": "rule",
-    "fd": "rule",
-    "association_rule": "rule",
     "reconstruction": "model",
     "statistical": "statistical",
-    "clustering": "statistical",
     "neighbor_consistency": "neighbor",
     "pattern_outlier": "pattern",
     "format_cluster": "pattern",
+    "secondary_format": "pattern",
     "numeric_format": "format",
     "typo": "text",
     "categorical_typo": "text",
+    "value_burst": "burst",
 }
 _DEFAULT_FAMILY = "other"
 

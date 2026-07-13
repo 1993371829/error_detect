@@ -79,12 +79,10 @@ execution:
     bootstrap_rounds: 30
     bootstrap_ratio: 0.8
     stability_conf_floor: 0.9
-  # 近似函数依赖(FD)违反检测（前移至 Stage 1，二期经统一分档验证输出双轨 severity）：
-  #   graded=true -> 统计强直接 high、灰区 LLM 三档审核、统计弱 drop；graded=false 退回一期二元。
+  # 近似函数依赖(FD)违反检测（前移至 Stage 1，经统一分档验证输出双轨 severity）：
+  #   统计强直接 high、灰区 LLM 三档审核、统计弱 drop。
   fd:
     enabled: true
-    graded: true                   # 使用分档验证（推荐）；false 退回一期二元语义校验
-    semantic_check: true           # graded=false 时的旧二元语义校验开关
     min_confidence: 0.9
     min_group_support: 5
     min_group_confidence: 0.9
@@ -118,9 +116,11 @@ stage3:
   # 思考模式（qwen3 等推理模型）：false=关闭思考(省 completion token，推荐)；
   # null=服务商默认(通常开启)；true=强制开启。与上面 llm.enable_thinking 相互独立，仅管 Stage 3。
   enable_thinking: false
-  max_workers: 8                   # LLM 并发调用线程数（受服务商 RPM/TPM 限流约束）
-  dedup_context_free: false        # 上下文无关格(MV/DMV/FI/T)按(列,值)复用判定（需消融验证召回不掉）
-  min_tier: low                    # 仅精检 confidence_tier >= 该层级的候选（low=全部）
+  max_workers: 16                  # LLM 并发调用线程数（消融验证 F1 持平、墙钟约减半；受服务商 RPM/TPM 限流约束）
+  dedup_context_free: false        # 上下文无关格(MV/DMV/FI/T)按(列,值)复用判定（beers 消融 F1 +0.031/调用 -49%，按需开启）
+  mv_passthrough: true             # Stage1 确定性 MV 直通确认跳过 LLM（MV 保护本就不可否决，纯省调用）
+  dmv_passthrough: false           # Stage1 DMV 直通确认跳过 LLM（消融容差内，保守默认关）
+  min_tier: low                    # 仅精检 confidence_tier >= 该层级的候选（low=全部；实测收紧到 mid 会掉召回）
 
 # 目录布局：data/ 仅原始数据；生成物写入 output/ 子目录
 layout:

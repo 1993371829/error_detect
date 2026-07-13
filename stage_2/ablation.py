@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -24,9 +26,10 @@ from stage_2.evaluate import cells_from, ground_truth_cells, metrics
 from stage_2.io_utils import merge_candidates, read_clean_mask, read_table
 from stage_2.model import ConditionalPredictor
 from stage_2.schema import candidates_to_frame
-from stage_2.score import _run_reconstruction
+from stage_2.score import _build_pseudo_clean, _run_reconstruction
 
-_OPTIONAL = ["statistical", "categorical", "association", "fd", "neighbor", "clustering"]
+_OPTIONAL = ["statistical", "categorical", "neighbor", "pattern", "numeric_format",
+             "value_burst"]
 
 
 def collect_candidates(df, clean_mask, semantic_types, cfg: Stage2Config) -> dict[str, list]:
@@ -43,7 +46,12 @@ def collect_candidates(df, clean_mask, semantic_types, cfg: Stage2Config) -> dic
 
     out: dict[str, list] = {}
     model = ConditionalPredictor()
-    model.fit(x_all[row_clean], specs)
+    # 与生产默认一致：伪干净训练（整行干净 + 单错屏蔽行），保证消融结论可迁移。
+    if cfg.detectors.reconstruction_pseudo_clean:
+        x_target, x_input, cell_valid = _build_pseudo_clean(x_all, clean_mask, specs, row_clean)
+        model.fit(x_target, specs, cell_valid=cell_valid, x_input=x_input)
+    else:
+        model.fit(x_all[row_clean], specs)
     recon = _run_reconstruction(
         df, specs, x_all, clean_mask, model,
         quantile=cfg.scoring.quantile, margin=cfg.scoring.margin,
@@ -51,23 +59,29 @@ def collect_candidates(df, clean_mask, semantic_types, cfg: Stage2Config) -> dic
         abs_prob_floor=cfg.scoring.abs_prob_floor, max_cells_per_row=cfg.scoring.max_cells_per_row,
         masked_inference=cfg.scoring.masked_inference,
         masked_inference_iters=cfg.scoring.masked_inference_iters,
-        cdf_normalize=cfg.scoring.cdf_normalize,
     )
     out["reconstruction"] = recon_frame_to_candidates(recon)
 
-    from stage_2.detectors.association_rule import detect_association
     from stage_2.detectors.categorical import detect_categorical
-    from stage_2.detectors.clustering import detect_clustering
-    from stage_2.detectors.fd_detector import detect_fd
     from stage_2.detectors.neighbor_consistency import detect_neighbor_consistency
+    from stage_2.detectors.numeric_format import detect_numeric_format
+    from stage_2.detectors.pattern_outlier import detect_pattern_outlier
     from stage_2.detectors.statistical import detect_statistical
 
     out["statistical"] = detect_statistical(df, clean_mask, ctx)
     out["categorical"] = detect_categorical(df, clean_mask, ctx)
-    out["association"] = detect_association(df, clean_mask, ctx)
-    out["fd"] = detect_fd(df, clean_mask, ctx)
-    out["neighbor"] = detect_neighbor_consistency(df, clean_mask, ctx)
-    out["clustering"] = detect_clustering(df, clean_mask, ctx)
+    out["neighbor"] = detect_neighbor_consistency(df, clean_mask, ctx, k=cfg.detectors.knn_k)
+    out["pattern"] = detect_pattern_outlier(
+        df, clean_mask, ctx,
+        dominant_share=cfg.detectors.pattern_dominant_share,
+        rare_max=cfg.detectors.pattern_rare_max,
+    )
+    out["numeric_format"] = detect_numeric_format(
+        df, clean_mask, ctx,
+        min_dominant_share=cfg.detectors.numeric_format_min_share,
+    )
+    from stage_2.detectors.value_burst import detect_value_burst
+    out["value_burst"] = detect_value_burst(df, clean_mask, ctx)
     return out
 
 
@@ -80,9 +94,10 @@ def _eval_subset(keys, cand_map, stage1, gt) -> dict:
     return metrics(cells_from(combined), gt)
 
 
-def _print_row(label: str, m: dict) -> None:
+def _print_row(label: str, m: dict, sink: list[dict]) -> None:
     print(f"  {label:32s} 检出={m['detected']:4d} TP={m['tp']:4d} FP={m['fp']:4d} "
           f"P={m['precision']:.3f} R={m['recall']:.3f} F1={m['f1']:.3f}")
+    sink.append({"subset": label, **m})
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -107,16 +122,30 @@ def main(argv: list[str] | None = None) -> None:
     for k, v in cand_map.items():
         print(f"  [{k}] {len(v)} 候选")
 
+    rows: list[dict] = []
     print("\n=== 合并集(Stage1 ∪ 子集) cell-level 指标 ===")
-    _print_row("baseline: reconstruction", _eval_subset(["reconstruction"], cand_map, stage1, gt))
+    _print_row("baseline: reconstruction", _eval_subset(["reconstruction"], cand_map, stage1, gt), rows)
     for d in _OPTIONAL:
-        _print_row(f"reconstruction + {d}", _eval_subset(["reconstruction", d], cand_map, stage1, gt))
-    _print_row("all detectors", _eval_subset(["reconstruction"] + _OPTIONAL, cand_map, stage1, gt))
+        _print_row(f"reconstruction + {d}", _eval_subset(["reconstruction", d], cand_map, stage1, gt), rows)
+    _print_row("all detectors", _eval_subset(["reconstruction"] + _OPTIONAL, cand_map, stage1, gt), rows)
     print("\n  （留一法：从 all 中移除单个检测器）")
     full = ["reconstruction"] + _OPTIONAL
     for d in _OPTIONAL:
         subset = [k for k in full if k != d]
-        _print_row(f"all - {d}", _eval_subset(subset, cand_map, stage1, gt))
+        _print_row(f"all - {d}", _eval_subset(subset, cand_map, stage1, gt), rows)
+
+    # 结果落盘，便于跨批次对比与追溯
+    out_dir = Path("output/runs")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{dp.dataset}_s2ablation_{datetime.now():%Y%m%d_%H%M%S}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "dataset": dp.dataset,
+            "gt_cells": len(gt),
+            "candidates_per_detector": {k: len(v) for k, v in cand_map.items()},
+            "results": rows,
+        }, f, ensure_ascii=False, indent=2)
+    print(f"\n消融结果已写入 {out_path}")
 
 
 if __name__ == "__main__":

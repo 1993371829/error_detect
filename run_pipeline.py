@@ -32,7 +32,7 @@ from stage_1.llm_usage import init_usage_file, load_usage
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
 _F1_LINE = re.compile(
-    r"(?:精检后\(最终确认\)|合并\(S1\+S2\)|Stage1\(规则层\))\s+"
+    r"(?:精检前\(合并候选\)|精检后\(最终确认\)|合并\(S1\+S2\)|Stage1\(规则层\))\s+"
     r"检出=\s*\d+\s+TP=\s*\d+\s+FP=\s*\d+\s+P=([0-9.]+)\s+R=([0-9.]+)\s+F1=([0-9.]+)"
 )
 
@@ -153,6 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Stage 2 启用全部检测器")
     p.add_argument("--min-tier", default=None, choices=["low", "mid", "high"],
                    help="Stage 3 仅精检 >= 该层级的候选")
+    # B 档消融开关（透传 stage_3.cli）
+    p.add_argument("--mv-passthrough", action="store_true",
+                   help="Stage1 MV 直通确认跳过 LLM（B1）")
+    p.add_argument("--dmv-passthrough", action="store_true",
+                   help="Stage1 DMV 直通确认跳过 LLM（B1 第二步）")
+    p.add_argument("--dedup-context-free", action="store_true",
+                   help="上下文无关格判定跨行复用（B2）")
+    p.add_argument("--stage3-max-workers", type=int, default=None,
+                   help="Stage 3 LLM 并发线程数（B4，默认 8）")
     return p
 
 
@@ -176,8 +185,10 @@ def main(argv: list[str] | None = None) -> None:
         rule_cache = _PROJECT_ROOT / layout.cache_dir / f"{dp.dataset}_{run_id}_rule_cache.json"
         stage3_cache = _PROJECT_ROOT / layout.cache_dir / f"{dp.dataset}_{run_id}_stage3_cache.json"
     else:
+        # 与 paths/layout.py 的默认一致（cache/{dataset}_stage3_cache.json），
+        # 保证独立运行 stage_3.cli 与流水线共享同一缓存。
         rule_cache = dp.rule_cache
-        stage3_cache = _PROJECT_ROOT / layout.cache_dir / f"{dp.dataset}_stage3_cache.json"
+        stage3_cache = dp.stage3_cache
 
     llm_cfg = Stage1Config.resolve().apply_env_overrides()
 
@@ -243,6 +254,14 @@ def main(argv: list[str] | None = None) -> None:
             s3_cmd.append("--no-cache")
         if args.min_tier:
             s3_cmd.extend(["--min-tier", args.min_tier])
+        if args.mv_passthrough:
+            s3_cmd.append("--mv-passthrough")
+        if args.dmv_passthrough:
+            s3_cmd.append("--dmv-passthrough")
+        if args.dedup_context_free:
+            s3_cmd.append("--dedup-context-free")
+        if args.stage3_max_workers is not None:
+            s3_cmd.extend(["--max-workers", str(args.stage3_max_workers)])
         step("stage3", s3_cmd)
 
     if not args.skip_eval:

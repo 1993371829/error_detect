@@ -1,8 +1,8 @@
 """
 Stage 2 多检测器框架的统一数据结构（借鉴文档 §3.3 / §3.4）。
 
-所有检测器（统计/低频拼写/关联规则/近似FD/近邻一致性/自监督重构/聚类）
-都输出统一的 CandidateError；证据融合后聚合为 SuspiciousCell。
+所有检测器（统计/低频拼写/近邻一致性/形态离群/数值格式/自监督重构）
+都输出统一的 CandidateError；跨检测器融合见 stage_2/fusion.py。
 """
 
 from __future__ import annotations
@@ -39,28 +39,6 @@ class CandidateError:
             "suggested_fix": "" if self.suggested_fix is None else str(self.suggested_fix),
             "subtype": str(self.metadata.get("subtype", "")),
         }
-
-
-@dataclass
-class SuspiciousCell:
-    """同一单元格多检测器证据融合后的结果（文档 §3.4）。"""
-
-    row_id: int
-    column: str
-    value: Any
-    suspicion_score: float
-    confidence_tier: str                # high / mid / low
-    evidence_list: list = field(default_factory=list)   # list[CandidateError]
-    candidate_fixes: list = field(default_factory=list)
-    error_type: str = "DIST"
-    source: str = "stage2"
-
-    def evidence_text(self) -> str:
-        parts = []
-        for e in self.evidence_list:
-            msg = e.evidence or f"{e.detector} score={e.score:.3g}"
-            parts.append(f"[{e.detector}] {msg}")
-        return " | ".join(parts)
 
 
 def candidates_to_frame(cands: list[CandidateError]) -> pd.DataFrame:

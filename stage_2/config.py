@@ -59,8 +59,6 @@ class ScoringConfig:
     masked_inference: bool = False
     # 迭代轮数：>1 时每轮把上一轮 Stage 2 候选并入脏集再中性化重打分（松绑同行互相掩护）
     masked_inference_iters: int = 1
-    # CDF 归一化：输出 norm_score 为分数在干净分布上的累积分位（跨列可比）
-    cdf_normalize: bool = False
     # 词表去污：训练前用编辑距离自过滤剔除混入类别词表的漏报 typo
     vocab_denoise: bool = False
     vocab_denoise_ratio: float = 0.05
@@ -70,27 +68,24 @@ class ScoringConfig:
 class DetectorConfig:
     """Stage 2 多检测器开关与关键阈值（文档 §7-§14）。
 
-    默认启用核心高召回检测器（reconstruction/statistical/categorical/neighbor/pattern），
-    与文档"多检测器 + 证据融合"主线对齐；association/clustering 误报较高，默认关闭，
-    可通过 --all-detectors 或 --detectors 选择启用。
-    fd 已前移至 Stage 1（双轨可信度），默认关闭以避免与 Stage 1 重复。
+    默认启用核心高召回检测器（reconstruction/statistical/categorical/neighbor/
+    pattern/numeric_format），与文档"多检测器 + 证据融合"主线对齐。
+    历史上的 association/clustering/fd 检测器已移除：前两者误报高且与
+    statistical/neighbor/FD 覆盖重叠，fd 已前移至 Stage 1（双轨可信度分档验证）。
     """
 
     reconstruction: bool = True
     statistical: bool = True
     categorical: bool = True
-    association: bool = False
     neighbor: bool = True
-    clustering: bool = False
-    fd: bool = False
     pattern: bool = True
     numeric_format: bool = True
+    value_burst: bool = True
     # 关键阈值
     robust_z: float = 3.0
     iqr_k: float = 1.5
     knn_k: int = 10
     sim_threshold: float = 0.85
-    assoc_min_confidence: float = 0.98
     # pattern_outlier：形态/日期格式离群
     pattern_dominant_share: float = 0.8   # 主流形态串占比下限（日期列同样受此闸门约束）
     pattern_rare_max: int = 2             # 罕见形态串的最大计数（<= 视为离群）
@@ -104,8 +99,7 @@ class DetectorConfig:
 
     def enabled(self) -> list[str]:
         names = ["reconstruction", "statistical", "categorical",
-                 "association", "neighbor", "clustering", "fd", "pattern",
-                 "numeric_format"]
+                 "neighbor", "pattern", "numeric_format", "value_burst"]
         return [n for n in names if getattr(self, n)]
 
 

@@ -41,7 +41,6 @@ class SuspectCell:
     semantic_type: str               # 该列语义类型（来自 rules.json）
     normal_samples: list = field(default_factory=list)  # 该列正常高频样例
     anomaly_score: Optional[float] = None  # Stage2 分布模型异常分（stage1 候选为 None）
-    subtype: str = ""                # Stage2 子类型（categorical/numeric/surrogate）
     verifiability: str = "verifiable"  # verifiable / consensus_only
     consensus: Optional[dict] = None   # 同 key 共识证据（见 _cell_consensus）
     column_stats: Optional[dict] = None  # 该列统计画像（借鉴 Cocoon，供 LLM 基于分布判断）
@@ -348,7 +347,6 @@ def build_row_contexts(
     candidates = candidates.copy()
     candidates["row_id"] = candidates["row_id"].astype(int)
     has_score = "anomaly_score" in candidates.columns
-    has_subtype = "subtype" in candidates.columns
 
     for row_id, group in candidates.groupby("row_id", sort=True):
         if row_id < 0 or row_id >= len(df):
@@ -376,7 +374,6 @@ def build_row_contexts(
                 semantic_type=semantic_types.get(col, ""),
                 normal_samples=normal_samples.get(col, []),
                 anomaly_score=_to_float(r.get("anomaly_score")) if has_score else None,
-                subtype=str(r.get("subtype", "") or "") if has_subtype else "",
                 verifiability="consensus_only" if col in consensus_map else "verifiable",
                 consensus=consensus,
                 column_stats=column_stats.get(col),

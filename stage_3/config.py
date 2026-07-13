@@ -49,13 +49,15 @@ class Stage3Config:
     min_avg_group: float = 3.0          # 探测 key 列的"平均每取值行数"门槛
     min_dominance: float = 0.5          # 某列被视为"共识型列"的组内主导占比门槛
     min_lift: float = 0.15              # 组内占比相对全局基准占比的最小提升（排除类别不平衡伪共识）
-    reject_conf_threshold: float = 0.85  # 共识冲突候选被 LLM 否决所需的最低把握
+    reject_conf_threshold: float = 0.98  # 共识冲突候选被 LLM 否决所需的最低把握（flights 归因后 0.85→0.98）
     protect_stage1_mv: bool = True       # Stage1 确定性缺失值不被 LLM 否决（确定信号，零误报回退）
     min_tier: str = "low"                # 仅精检 confidence_tier >= 该层级的候选（low=全部）
     # 性能优化（见 stage_3/verifier.py）
-    max_workers: int = 8                  # LLM 并发调用线程数（受服务商 RPM/TPM 限流约束）
+    max_workers: int = 16                 # LLM 并发调用线程数（受服务商 RPM/TPM 限流约束；rayyan 消融 16 并发 F1 持平、墙钟 -52%）
     enable_thinking: Optional[bool] = False  # qwen3 思考模式；False=关(省 completion token)，None=服务商默认
-    dedup_context_free: bool = False      # 上下文无关格按(列,值,类型)复用判定（需消融验证召回不掉）
+    dedup_context_free: bool = False      # 上下文无关格按(列,值,类型)复用判定（beers 消融 F1 +0.031/调用 -49%，默认关由使用者按需开）
+    mv_passthrough: bool = True           # Stage1 确定性 MV 直通确认跳过 LLM（理论无损：MV 保护本就不可被否决，纯省调用）
+    dmv_passthrough: bool = False         # Stage1 DMV 直通确认跳过 LLM（rayyan 消融 F1 -0.001 容差内，默认关由使用者按需开）
     layout: OutputLayout = field(default_factory=OutputLayout)
     paths: PathsConfig = field(default_factory=PathsConfig)
     llm: Stage1Config = field(default=None)
@@ -65,6 +67,7 @@ class Stage3Config:
         "max_normal_samples", "limit", "min_avg_group", "min_dominance",
         "min_lift", "reject_conf_threshold", "protect_stage1_mv", "min_tier",
         "max_workers", "enable_thinking", "dedup_context_free",
+        "mv_passthrough", "dmv_passthrough",
     )
 
     @classmethod
@@ -101,20 +104,24 @@ class Stage3Config:
         dataset: str | None = None,
         cli_overrides: Optional[dict[str, Any]] = None,
     ) -> DatasetPaths:
-        """根据 --input 解析 Stage 3 依赖的全部路径。"""
+        """根据 --input 解析 Stage 3 依赖的全部路径。
+
+        CLI 显式指定的路径优先；否则用数据集默认路径。（修复：此前 CLI 值只被用来
+        跳过默认赋值而从未写入，导致带 --cache 运行时实际落到 dataclass 默认的
+        hospital 路径，多数据集并行时写同一缓存文件而冲突。）
+        """
         dp = resolve_dataset_paths(dirty_csv, self.layout, dataset=dataset)
         ov = cli_overrides or {}
+
+        def _pick(key: str, default: Path) -> str:
+            val = ov.get(key)
+            return val if val is not None else rel_path(default)
+
         self.paths.input_csv = rel_path(dp.dirty_csv)
-        if ov.get("candidates") is None:
-            self.paths.candidates = rel_path(dp.combined_candidates)
-        if ov.get("rules") is None:
-            self.paths.rules = rel_path(dp.rules)
-        if ov.get("results_out") is None:
-            self.paths.results_out = rel_path(dp.stage3_results)
-        if ov.get("final_out") is None:
-            self.paths.final_errors_out = rel_path(dp.final_errors)
-        if ov.get("cache") is None:
-            self.paths.cache = rel_path(dp.stage3_cache)
-        if ov.get("clean_csv") is None:
-            self.paths.clean_csv = rel_path(dp.clean_csv)
+        self.paths.candidates = _pick("candidates", dp.combined_candidates)
+        self.paths.rules = _pick("rules", dp.rules)
+        self.paths.results_out = _pick("results_out", dp.stage3_results)
+        self.paths.final_errors_out = _pick("final_out", dp.final_errors)
+        self.paths.cache = _pick("cache", dp.stage3_cache)
+        self.paths.clean_csv = _pick("clean_csv", dp.clean_csv)
         return dp

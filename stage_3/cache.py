@@ -52,9 +52,19 @@ class ResponseCache:
     def _flush_locked(self) -> None:
         if self._dirty == 0:
             return
-        # 原子写：先写临时文件再替换，避免进程中断时截断/损坏缓存文件
-        tmp = f"{self.path}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.cache, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, self.path)
-        self._dirty = 0
+        # 原子写：先写临时文件再替换，避免进程中断时截断/损坏缓存文件。
+        # Windows 上若文件恰被其他进程占用（并行流水线），os.replace 抛 PermissionError；
+        # flush 失败不应让整个精检崩溃——保留 _dirty，留待下次批量/结束时重试。
+        tmp = f"{self.path}.{os.getpid()}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.cache, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self.path)
+            self._dirty = 0
+        except OSError as exc:
+            print(f"  [stage3-cache][warn] 缓存落盘失败（稍后重试）: {exc}")
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass

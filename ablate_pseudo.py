@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -29,7 +31,7 @@ DATASETS = ["hospital", "flights", "beers", "rayyan", "billionaire", "movies"]
 # 两种训练策略（只改重构训练集构造，其余检测器/阈值与当前默认一致）
 VARIANTS = {
     "strict": {"reconstruction_pseudo_clean": False},
-    "pseudo": {"reconstruction_pseudo_clean": True, "pseudo_clean_min_strict": 10**9},
+    "pseudo": {"reconstruction_pseudo_clean": True},
 }
 
 
@@ -63,10 +65,8 @@ def _run_combined(dataset: str, variant_kwargs: dict) -> tuple[pd.DataFrame, int
         max_cells_per_row=cfg.scoring.max_cells_per_row,
         masked_inference=cfg.scoring.masked_inference,
         masked_inference_iters=cfg.scoring.masked_inference_iters,
-        cdf_normalize=cfg.scoring.cdf_normalize,
         detectors=cfg.detectors,
         semantic_types=semantic_types,
-        llm=None,
     )
 
     s1_path = Path(cfg.paths.stage1_errors)
@@ -113,6 +113,13 @@ def main(argv: list[str] | None = None) -> None:
               f"   {p['precision']:.3f}/{p['recall']:.3f}/{p['f1']:.3f}     "
               f"{d_f1:+8.3f}")
     print("=" * 104)
+
+    out_dir = Path("output/runs")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"ablate_pseudo_{datetime.now():%Y%m%d_%H%M%S}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+    print(f"消融结果已写入 {out_path}")
 
 
 if __name__ == "__main__":

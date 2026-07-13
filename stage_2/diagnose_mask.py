@@ -28,7 +28,7 @@ import pandas as pd
 
 from paths.layout import resolve_dataset_paths
 from stage_1.profiling import is_blank
-from stage_1.typo_detect import levenshtein
+from stage_2.text_utils import levenshtein
 from stage_2.config import Stage2Config
 from stage_2.encoding import TabularEncoder, _is_blank
 from stage_2.io_utils import read_clean_mask, read_table

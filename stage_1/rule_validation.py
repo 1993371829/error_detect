@@ -71,21 +71,6 @@ def bootstrap_stability(
     return hits / th.bootstrap_rounds
 
 
-def statistical_tier(
-    support: int, confidence: float, stability: float, th: GradeThresholds
-) -> str:
-    """纯统计预分流：返回 'high' | 'gray' | 'drop'。"""
-    if support < th.drop_max_support or confidence < th.drop_max_confidence:
-        return "drop"
-    if (
-        support >= th.high_min_support
-        and confidence >= th.high_min_confidence
-        and stability >= th.high_min_stability
-    ):
-        return "high"
-    return "gray"
-
-
 def _parse_tier(data) -> tuple[str, str]:
     """解析 LLM 审核返回，映射为 (tier, reason)。解析失败保守 medium。"""
     if not isinstance(data, dict):
@@ -149,12 +134,16 @@ def grade_rule(
     Returns:
         (severity, stability, reason)，severity ∈ {high, medium, drop}。
     """
-    stability = bootstrap_stability(recompute_confidence, n_rows, th, seed=seed)
-    tier = statistical_tier(support, confidence, stability, th)
-    if tier == "high":
-        return "high", stability, f"统计强(support={support},conf={confidence:.2f},stab={stability:.2f})"
-    if tier == "drop":
-        return "drop", stability, f"统计弱(support={support},conf={confidence:.2f})"
+    # 粗筛：drop 与"不可能 high"仅由 support/confidence 决定，跳过 30 轮 bootstrap
+    # （stability 只影响统计强直通分支，判定结果与全量计算完全一致）。
+    if support < th.drop_max_support or confidence < th.drop_max_confidence:
+        return "drop", 0.0, f"统计弱(support={support},conf={confidence:.2f})"
+    if support >= th.high_min_support and confidence >= th.high_min_confidence:
+        stability = bootstrap_stability(recompute_confidence, n_rows, th, seed=seed)
+        if stability >= th.high_min_stability:
+            return "high", stability, f"统计强(support={support},conf={confidence:.2f},stab={stability:.2f})"
+    else:
+        stability = 0.0
     # 灰区 -> LLM 三档审核
     if audit_prompt is None:
         return "medium", stability, "灰区无审核 prompt，保守 medium"

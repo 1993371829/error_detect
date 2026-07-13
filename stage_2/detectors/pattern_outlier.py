@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Optional
 
@@ -51,6 +52,28 @@ def _shape(s: str) -> str:
         else:
             out.append(c)
     return "".join(out)
+
+
+def _coarse_shape(s: str) -> str:
+    """粗化形态：连续字母块 -> A、连续数字块 -> N，其余原样。
+
+    月份名长短、单双位日期等细节被归并，同一日期格式收敛为一个簇
+    （'19 December 1969 (USA)' 与 '8 May 2001 (USA)' 同为 'N A N (A)'）。
+    """
+    s = re.sub(r"[A-Za-z]+", "A", s)
+    s = re.sub(r"\d+", "N", s)
+    return s
+
+
+def _is_subsequence(sub: str, full: str) -> bool:
+    """sub 是否为 full 的字符子序列（保序、可不连续）。
+
+    合法的日期粒度变体通常是主导格式的"截断"（'A N (A)' ⊂ 'N A N (A)'，即缺日的
+    'May 1985 (USA)'）；而结构重排（'A N, N A'）或加长（'N:NA N'）不是子序列，
+    属于另一套写法，是格式不一致的强信号。
+    """
+    it = iter(full)
+    return all(c in it for c in sub)
 
 
 def _looks_like_date(col: str, ctx: DetectorContext, clean_vals: pd.Series) -> bool:
@@ -84,6 +107,10 @@ def detect_pattern_outlier(
     dominant_share: float = 0.8,
     rare_max: int = 2,
     min_rows: int = 30,
+    secondary_dominant_share: float = 0.6,
+    secondary_min_share: float = 0.02,
+    secondary_max_share: float = 0.40,
+    secondary_min_count: int = 20,
 ) -> list[CandidateError]:
     """形态串 / 日期格式离群检测，返回候选错误列表（error_type=FI）。"""
     cands: list[CandidateError] = []
@@ -111,6 +138,49 @@ def detect_pattern_outlier(
         dom_share = dom_c / pat_total
 
         is_date = _looks_like_date(col, ctx, clean_vals)
+
+        # 次级格式簇路径（仅日期/时间列）：细形态因月份名长短等被打散（Release Date 细形态
+        # 主导仅 14%），改用粗形态（字母块->A/数字块->N）聚簇。当存在明显主导格式时，占比
+        # 5%~40% 级别的"次级格式簇"（如 'Apr 17, 1981 Wide' vs 主导 '17 April 1981 (USA)'）
+        # 高于 rare 阈值而被细形态路径放过——此处以低分交融合层与 Stage 3 裁决
+        # （prompt 已有"多种写法应判 FI"原则）。仅限日期列：非日期列（人名/多值列表等）
+        # 的次级粗形态多为天然合法变体，6 数据集模拟显示误报过高。
+        if is_date:
+            coarse_counts = Counter(_coarse_shape(v) for v in clean_vals)
+            cdom_pat, cdom_c = coarse_counts.most_common(1)[0]
+            if cdom_c / pat_total >= secondary_dominant_share:
+                # 子序列过滤：截断粒度变体（'A N (A)' ⊂ 'N A N (A)'，如缺日的
+                # 'May 1985 (USA)'）多为合法写法（movies 实测 344/427 合法），跳过；
+                # 结构重排（'Apr 17, 1981 Wide'）或加长（'7:10aDec 1'）才是格式不一致。
+                secondary = {
+                    p for p, c in coarse_counts.items()
+                    if p != cdom_pat
+                    and c >= secondary_min_count
+                    and secondary_min_share <= c / pat_total <= secondary_max_share
+                    and not _is_subsequence(p, cdom_pat)
+                }
+                if secondary:
+                    for pos in range(n):
+                        val = series.iloc[pos]
+                        if is_blank(val):
+                            continue
+                        val = str(val)
+                        cpat = _coarse_shape(val)
+                        if cpat not in secondary:
+                            continue
+                        c = coarse_counts.get(cpat, 0)
+                        cands.append(CandidateError(
+                            row_id=int(df.index[pos]), column=col, value=val,
+                            detector="secondary_format", error_type="FI",
+                            score=0.6,
+                            evidence=f"次级日期格式簇 '{cpat}'(占比 {c / pat_total:.1%})，"
+                                     f"主导格式 '{cdom_pat}'({cdom_c / pat_total:.0%})——"
+                                     f"同列存在两种系统性写法，疑为格式不一致",
+                            suggested_fix=None,
+                            metadata={"pattern": cpat, "dominant": cdom_pat,
+                                      "subtype": "secondary_format"},
+                        ))
+
         # 关键修复：无强主流形态（自由文本 / 多合法格式并存，如 '8 September 1960 (USA)'）一律跳过。
         # 日期列同样受此闸门约束——此前日期列绕过该闸门，导致主流占比极低(如 14%)的多格式日期列
         # 整列被判"格式不符"，制造海量误报。只有形态确实统一(dom_share 达标)的列才做离群判定。

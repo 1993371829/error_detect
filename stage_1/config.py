@@ -130,24 +130,6 @@ class RangeConfig:
 
 
 @dataclass
-class IForestConfig:
-    """数值列联合孤立森林极端值检测（高精度 top 分位）。默认关闭。"""
-
-    enabled: bool = False
-    top_quantile: float = 0.995
-    min_numeric_cols: int = 2
-
-
-@dataclass
-class ArithConfig:
-    """LLM 跨列算术/约束规则（AST 安全求值 + 支持度/违反率验证）。默认关闭。"""
-
-    enabled: bool = False
-    min_support: int = 30
-    max_violation_rate: float = 0.02
-
-
-@dataclass
 class StatExtremeConfig:
     """极端统计兜底检测（高精度）：数值/日期列 Robust-Z(>6) + IQR(k=4.5) 双判据。"""
 
@@ -184,8 +166,6 @@ class FDConfig:
     """
 
     enabled: bool = True
-    graded: bool = True                     # 使用分档验证（detect_vad_graded）；关闭则退回二元
-    semantic_check: bool = True             # graded=False 时的旧二元语义校验开关
     min_confidence: float = 0.9
     min_group_support: int = 5
     min_group_confidence: float = 0.9
@@ -238,8 +218,6 @@ class ExecutionConfig:
     dup: DupConfig = field(default_factory=DupConfig)
     xcol: XColConfig = field(default_factory=XColConfig)
     range_check: RangeConfig = field(default_factory=RangeConfig)
-    iforest: IForestConfig = field(default_factory=IForestConfig)
-    arith: ArithConfig = field(default_factory=ArithConfig)
     statistic_extreme: StatExtremeConfig = field(default_factory=StatExtremeConfig)
     fd: FDConfig = field(default_factory=FDConfig)
     cfd: CFDConfig = field(default_factory=CFDConfig)
@@ -323,14 +301,6 @@ class Stage1Config:
                         for rkey, rval in val.items():
                             if hasattr(cfg.execution.range_check, rkey):
                                 setattr(cfg.execution.range_check, rkey, rval)
-                    elif key == "iforest" and isinstance(val, dict):
-                        for ikey, ival in val.items():
-                            if hasattr(cfg.execution.iforest, ikey):
-                                setattr(cfg.execution.iforest, ikey, ival)
-                    elif key == "arith" and isinstance(val, dict):
-                        for akey, aval in val.items():
-                            if hasattr(cfg.execution.arith, akey):
-                                setattr(cfg.execution.arith, akey, aval)
                     elif key == "statistic_extreme" and isinstance(val, dict):
                         for skey, sval in val.items():
                             if hasattr(cfg.execution.statistic_extreme, skey):

@@ -22,7 +22,6 @@ from typing import Optional
 
 import pandas as pd
 
-from stage_1.llm_rules import complete_json
 from stage_1.profiling import is_blank
 
 
@@ -224,61 +223,6 @@ def detect_fd_violations(
 
 
 # --------------------------------------------------------------------------- #
-# FD 语义校验（借鉴 Cocoon：统计挖掘出强 FD 后，让 LLM 判断其是否语义上真实成立）
-# --------------------------------------------------------------------------- #
-
-FD_SEMANTIC_PROMPT = """你是数据质量专家。下面是从一张表中统计挖掘出的"候选函数依赖" A -> B，
-即 A 列的取值疑似能决定 B 列的取值。请判断该依赖在现实语义上是否真实成立
-（即 A 在概念上确实决定 B，而非因数据分布巧合/类别不平衡造成的伪相关）。
-
-候选依赖: {a} -> {b}
-样例映射（A 值 => B 的多数值，占比，组大小）:
-{samples}
-
-判断标准:
-- 真实依赖示例: ZipCode -> City/State、ProviderNumber -> HospitalName、MeasureCode -> MeasureName。
-- 伪依赖示例: A 与 B 无现实因果/标识关系，仅因某列取值高度集中而"碰巧"一致。
-
-只输出 JSON（不要任何解释）:
-{{"valid": true/false, "reason": "简短理由"}}"""
-
-
-def is_fd_semantically_valid(fd: FunctionalDependency, llm, max_samples: int = 15) -> tuple[bool, str]:
-    """
-    用 LLM 判断候选 FD 是否语义上真实成立。
-
-    解析/调用失败时保守保留（返回 True），避免因校验环节异常而误删真实错误。
-    """
-    sample_lines = []
-    for a_val, (dom_b, share, size) in list(fd.mapping.items())[:max_samples]:
-        sample_lines.append(f"  {a_val!r} => {dom_b!r} ({share:.0%}, n={size})")
-    prompt = FD_SEMANTIC_PROMPT.format(
-        a=fd.determinant, b=fd.dependent, samples="\n".join(sample_lines),
-    )
-    # 复用规则归纳同款健壮解析（max_tokens 截断保护 + 宽松解析 + 重试）
-    data = complete_json(llm, prompt, label=f"FD {fd.determinant}->{fd.dependent}")
-    if isinstance(data, dict):
-        return bool(data.get("valid", True)), str(data.get("reason", ""))
-    print(f"[fd-warn] {fd.determinant}->{fd.dependent} 语义校验失败，保守保留")
-    return True, "语义校验失败，保守保留"
-
-
-def filter_fds_semantically(fds: list[FunctionalDependency], llm) -> list[FunctionalDependency]:
-    """对候选 FD 逐条做 LLM 语义校验，仅保留被确认为真实成立的 FD。"""
-    if not fds or llm is None:
-        return fds
-    kept: list[FunctionalDependency] = []
-    for fd in fds:
-        valid, reason = is_fd_semantically_valid(fd, llm)
-        fd.semantic_reason = reason
-        if valid:
-            kept.append(fd)
-        else:
-            print(f"[fd-drop] 语义校验否决 {fd.determinant}->{fd.dependent}: {reason}")
-    return kept
-
-
-# --------------------------------------------------------------------------- #
 # 分档验证支持（二期）：子样本一致率重算 + 三档 LLM 审核 prompt
 # --------------------------------------------------------------------------- #
 
@@ -315,45 +259,6 @@ FD_AUDIT_PROMPT_GRADED = """你是数据质量专家。下面是从一张表中�
 
 只输出 JSON（不要任何解释）:
 {{"tier": "high|medium|drop", "reason": "简短理由"}}"""
-
-
-def detect_vad(
-    df: pd.DataFrame,
-    *,
-    min_confidence: float = 0.9,
-    min_group_support: int = 5,
-    min_group_confidence: float = 0.9,
-    pure_threshold: float = 0.9,
-    min_pure_group_ratio: float = 0.85,
-    min_distinct_dependents: int = 2,
-    max_determinant_unique_ratio: float = 0.5,
-    min_dependent_unique: int = 2,
-    llm=None,
-    semantic_check: bool = False,
-) -> tuple[list[dict], list[FunctionalDependency]]:
-    """
-    挖掘 FD 并返回 (VAD 错误记录, 发现的 FD 列表)。
-
-    当 semantic_check=True 且提供 llm 时，在统计挖掘后增加一步 LLM 语义校验，
-    只有被确认语义成立的 FD 才用于生成 VAD 错误（借鉴 Cocoon，降低伪依赖误报）。
-    """
-    fds = discover_all_fds(
-        df,
-        min_confidence=min_confidence,
-        min_group_support=min_group_support,
-        min_group_confidence=min_group_confidence,
-        pure_threshold=pure_threshold,
-        min_pure_group_ratio=min_pure_group_ratio,
-        min_distinct_dependents=min_distinct_dependents,
-        max_determinant_unique_ratio=max_determinant_unique_ratio,
-        min_dependent_unique=min_dependent_unique,
-    )
-    if semantic_check and llm is not None and fds:
-        before = len(fds)
-        fds = filter_fds_semantically(fds, llm)
-        print(f"FD 语义校验: {before} 条候选 -> 保留 {len(fds)} 条")
-    errors = detect_fd_violations(df, fds)
-    return errors, fds
 
 
 def detect_vad_graded(

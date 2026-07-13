@@ -3,6 +3,16 @@
 本文档概述本项目提出的**基于大语言模型（LLM）的漏斗式表格数据错误检测框架**。
 框架将「规则筑底 → 多检测器补漏 → 语义精检」组织为一条逐层收敛的漏斗式流水线，在保证精度的同时提升召回，并借助 LLM 完成规则归纳、语义校验与逐格修复。
 
+三个阶段按漏斗隐喻分别命名为：
+
+| 阶段 | 名称 | 英文名 | 职能一句话 |
+|------|------|--------|------------|
+| Stage 1 | **规则锚定层** | Rule Anchoring Layer | LLM 归纳规则 + 确定性执行，高精度筑底，产出可信干净掩码 |
+| Stage 2 | **证据网罗层** | Evidence Ensemble Layer | 神经-统计多检测器并行撒网，高召回补盲点，多源证据融合分层 |
+| Stage 3 | **语义裁决层** | Semantic Arbitration Layer | LLM 基于结构化证据包逐格裁决，降误报保召回，标准化修复 |
+
+**锚定（Anchor）→ 网罗（Ensemble）→ 裁决（Arbitrate）**：上游锚定的确定性知识约束下游的学习与裁决，下游的语义能力化解上游遗留的模糊与误报。
+
 ---
 
 ## 1. 框架总览
@@ -13,7 +23,7 @@
 flowchart TB
     IN[("脏表 dirty.csv<br/>逐格待检")]
 
-    subgraph S1["Stage 1 · 规则层（高精度筑底）"]
+    subgraph S1["Stage 1 · 规则锚定层（高精度筑底）"]
         direction TB
         S1A["LLM 归纳规则<br/>regex · 值域 · 类型 · semantic_type"]
         S1B["确定性检测器<br/>MV · DMV · 标准化 · 泄漏 · 重复 · 硬范围 · 极端离群 · 跨列对调"]
@@ -21,16 +31,16 @@ flowchart TB
         S1A --> S1B --> S1C
     end
 
-    subgraph S2["Stage 2 · 多检测器候选层（高召回补漏）"]
+    subgraph S2["Stage 2 · 证据网罗层（高召回补漏）"]
         direction TB
         S2A["统一条件预测重构模型<br/>P(列 | 同行其余列) · 身份保留编码 · 伪干净训练"]
-        S2B["多检测器并行<br/>统计 · 类别Typo · 形态离群 · 近邻 · (关联/FD/聚类可选)"]
+        S2B["多检测器并行<br/>统计 · 类别Typo · 形态离群 · 数值格式 · 近邻"]
         S2C["加权独立乘积融合<br/>suspicion_score + 置信分层 + 证据族计数"]
         S2A --> S2C
         S2B --> S2C
     end
 
-    subgraph S3["Stage 3 · LLM 精检层（语义裁决）"]
+    subgraph S3["Stage 3 · 语义裁决层（LLM 精检）"]
         direction TB
         S3A["证据包上下文<br/>整行 · 列画像 · 跨行共识 · 多检测器证据"]
         S3B["LLM 逐行精检<br/>真伪判定 · 类型修正 · 误报否决 · 修复标准化"]
@@ -45,13 +55,13 @@ flowchart TB
     S2 -->|"combined_candidates（融合证据 + 分层）"| S3
     S3 --> OUT
 
-    LLM{{"LLM 三角色<br/>① 归纳者 + 灰区仲裁<br/>② 语义校验者<br/>③ 逐格精检者"}}
+    LLM{{"LLM 三角色<br/>① 归纳者 + 灰区仲裁<br/>② 语义校验者<br/>③ 逐格裁决者"}}
     LLM -.-> S1
     LLM -.-> S2
     LLM -.-> S3
 ```
 
-一句话概括：**规则层筑底求精 → 检测器层补漏求全 → LLM 精检层降误报保召回**，三者以 `clean_mask / rules.json / combined_candidates` 串成闭环，最终交付带位置、类型与修复建议的错误清单。
+一句话概括：**规则锚定层筑底求精 → 证据网罗层补漏求全 → 语义裁决层降误报保召回**，三者以 `clean_mask / rules.json / combined_candidates` 串成闭环，最终交付带位置、类型与修复建议的错误清单。
 
 ### 1.1 任务定义
 
@@ -81,15 +91,15 @@ flowchart TB
 
 框架的核心思想是**精度—召回—语义逐层收敛**：每一层解决上一层难以覆盖的问题，并把可靠知识向下传递。
 
-- **Stage 1 规则层**：高精度、可解释，优先检出确定性错误与依赖违反，为整体筑底
-- **Stage 2 多检测器候选层**：高召回，补 Stage 1 的盲点，输出带证据的融合候选
-- **Stage 3 LLM 精检层**：语义确认、过滤误报、统一错误类型与修复建议，产出最终交付结果
+- **Stage 1 规则锚定层**：高精度、可解释，优先检出确定性错误与依赖违反，为整体筑底
+- **Stage 2 证据网罗层**：高召回，补 Stage 1 的盲点，输出带证据的融合候选
+- **Stage 3 语义裁决层**：语义确认、过滤误报、统一错误类型与修复建议，产出最终交付结果
 
 ```mermaid
 flowchart LR
-    IN["脏表 dirty.csv"] --> S1["Stage 1 规则层<br/>高精度 / 确定性 + 依赖违反"]
-    S1 --> S2["Stage 2 多检测器层<br/>高召回 / 补盲点"]
-    S2 --> S3["Stage 3 LLM 精检层<br/>语义确认 / 修复"]
+    IN["脏表 dirty.csv"] --> S1["Stage 1 规则锚定层<br/>高精度 / 确定性 + 依赖违反"]
+    S1 --> S2["Stage 2 证据网罗层<br/>高召回 / 补盲点"]
+    S2 --> S3["Stage 3 语义裁决层<br/>语义确认 / 修复"]
     S3 --> OUT["final_errors.csv<br/>最终交付"]
 ```
 
@@ -99,7 +109,7 @@ LLM 贯穿三层，但每层承担不同职责，且**始终不直接决定确�
 
 - **Stage 1（归纳者 + 灰区仲裁者）**：为每列归纳可执行的校验规则与标准化规格，交由确定性代码执行；并对**统计灰区的依赖规则**做三档审核（high/medium/drop）
 - **Stage 2（语义校验者）**：对统计挖掘出的函数依赖、列对调等候选做语义确认，过滤伪关系
-- **Stage 3（精检者）**：基于结构化证据包逐格判定真伪、修正类型并给出标准化修复
+- **Stage 3（裁决者）**：基于结构化证据包逐格判定真伪、修正类型并给出标准化修复
 
 ### 1.5 阶段间知识传递
 
@@ -107,18 +117,18 @@ LLM 贯穿三层，但每层承担不同职责，且**始终不直接决定确�
 
 ```mermaid
 flowchart TD
-    IN["dirty.csv"] --> S1["Stage 1 规则层"]
+    IN["dirty.csv"] --> S1["Stage 1 规则锚定层"]
     S1 --> E1["stage1_errors.csv<br/>(含 severity 双轨)"]
     S1 --> R1["rules.json<br/>(规则 + semantic_type)"]
     S1 --> M1["clean_mask.csv<br/>(仅 high 级错误置脏)"]
 
-    IN --> S2["Stage 2 多检测器层"]
+    IN --> S2["Stage 2 证据网罗层"]
     M1 --> S2
     E1 --> S2
     R1 --> S2
     S2 --> F2["combined_candidates.csv<br/>(S1 ∪ S2 融合候选)"]
 
-    IN --> S3["Stage 3 LLM 精检层"]
+    IN --> S3["Stage 3 语义裁决层"]
     F2 --> S3
     R1 --> S3
     S3 --> O3["final_errors.csv<br/>(最终确认错误)"]
@@ -152,7 +162,9 @@ python run_pipeline.py --input data/hospital_dirty.csv --fresh-cache
 
 ---
 
-## 2. Stage 1：规则层
+## 2. Stage 1：规则锚定层（Rule Anchoring Layer）
+
+> 命名释义：本层用「LLM 归纳 + 确定性执行」把高可信规则**锚定**为整条流水线的地基——锚定的不仅是错误（高精度检出），还有干净数据（`clean_mask` 供下游训练）与列语义（`rules.json` 供下游先验）。
 
 ### 2.1 输入输出
 
@@ -167,10 +179,10 @@ python run_pipeline.py --input data/hospital_dirty.csv --fresh-cache
 以「LLM 归纳规则 + 确定性检测器 + 依赖规则族」混合执行：
 
 1. **逐列画像**：纯统计生成紧凑画像（空值率、样例值、长度/数值统计、观测模式、字符集、边缘样例）
-2. **规则归纳**：将画像喂给 LLM，归纳 `regex / value_set / length / numeric_range / not_null / logical_type` 等规则及 `semantic_type`（命中规则缓存则复用，零成本）
+2. **规则归纳**：将画像喂给 LLM，归纳 `regex / value_set / length / numeric_range / not_null / logical_type` 等规则及 `semantic_type`（命中规则缓存则复用，零成本；缓存键含 prompt 版本号 + 模型名，改 prompt / 换模型自动失效）
 3. **规则过滤与编译**：规则守卫（`rule_guard`，丢弃自由文本上的过严正则）→ 追加逻辑类型一致性规则（`bool/int/float/date`）→ 编译为确定性函数（`rule_compiler`）→ 按违反率上限（`max_violation_rate`，默认 0.3）丢弃过拟合规则
 4. **逐格执行**：非可空列优先扫描缺失值（MV，独立于 LLM），随后命中第一条违反规则即记录并停止
-5. **全局确定性检测器链**（跳过已标记单元格）：伪缺失 DMV → 标准化不一致 FI → 元数据泄漏 FI → 重复拼接值 FI → 语义硬范围 FI → 孤立森林（默认关）→ 跨列对调 FI（可选 LLM 语义确认）→ 跨列算术约束（默认关）→ 极端统计离群 FI
+5. **全局确定性检测器链**（跳过已标记单元格）：伪缺失 DMV → 标准化不一致 FI → 元数据泄漏 FI → 重复拼接值 FI → 语义硬范围 FI → 跨列对调 FI（可选 LLM 语义确认）→ 极端统计离群 FI（用此前已标记的单元格构造部分干净掩码估参，避免已知脏值拉偏统计量）
 6. **依赖规则族**（收集到独立 sink，见 §2.4）：近似函数依赖 FD → 条件函数依赖 CFD → 否定约束 DC → **规则冲突消解** → 并入错误集
 7. **构建 clean_mask**：仅 `severity==high` 的错误单元格置脏
 
@@ -187,8 +199,8 @@ python run_pipeline.py --input data/hospital_dirty.csv --fresh-cache
 | 硬范围 | `range_detect.py` | 开 | FI | 按 `semantic_type` 关键词施加 age/percentage/price/lat/lon/year 等硬范围 |
 | 跨列对调 | `xcol_detect.py` | 开(需 LLM) | FI | 「全名↔缩写」列对经 LLM 语义确认后标记两列对调 |
 | 极端统计离群 | 复用 `stage_2.detect_statistical` | 开 | FI | Robust-Z(>6)+IQR(k=4.5) 双判据，只捞确凿极端值；温和离群交 Stage 2 |
-| 孤立森林 | `iforest_detect.py` | 关 | FI | 数值列联合 IsolationForest top 分位 + 逐列 robust-z 定位 |
-| 跨列算术 | `arith_rules.py` | 关 | FI | LLM 归纳算术约束 → **AST 白名单安全求值** → support/violation 验证 |
+
+跨列算术约束不再作为独立检测器，统一由 DC 规则族的 `enable_arith` 入口承载（LLM 归纳算术约束 → **AST 白名单安全求值** → 分档验证）。
 
 **安全要点**：算术约束经 `ast.walk` 白名单校验，仅允许数字/列名/`+ - * / % **`/比较/and-or-not/`abs|min|max|round`，其余节点抛 `UnsafeExpression`，杜绝注入。
 
@@ -231,7 +243,9 @@ Stage 1 错误记录带 `severity ∈ {high, medium}`：
 
 ---
 
-## 3. Stage 2：多检测器候选层
+## 3. Stage 2：证据网罗层（Evidence Ensemble Layer）
+
+> 命名释义：本层以「一个统一重构模型 + 一组互补检测器」在全表**网罗**一切可疑信号——宁多勿漏，再以加权独立乘积融合把多源证据编织为带分层与证据族计数的候选集，交语义裁决层定夺。
 
 ### 3.1 输入输出
 
@@ -245,7 +259,7 @@ Stage 1 错误记录带 `severity ∈ {high, medium}`：
 在 Stage 1 的干净掩码上估参/训练，随后在全量数据上并行运行多检测器，最后与 Stage 1 证据融合：
 
 - **干净子集估参**：编码器、统计阈值仅在 `clean_mask==True` 的单元格上学习；条件预测模型仅在「整行干净」或「单错屏蔽」的行上训练（见 §3.4），避免脏格污染上下文
-- **多检测器并行**（默认开：重构 / 统计 / 类别 / 近邻 / 形态离群；默认关：关联规则 / 近似FD / 聚类）
+- **多检测器并行**（默认全开：重构 / 统计 / 类别 / 形态离群 / 数值格式 / 近邻 / 异常高频重复值）
 - **融合**：按 `(row_id, column)` 聚合多源证据，加权独立乘积计算可疑度并分层
 
 ### 3.3 各检测器一览
@@ -255,11 +269,12 @@ Stage 1 错误记录带 `severity ∈ {high, medium}`：
 | 重构 reconstruction | `reconstruction.py` | 开 | 条件预测 `P(列\|同行其余列)`，观测概率低/残差大即可疑 | DIST（含键→值冲突） |
 | 统计 statistical | `statistical.py` | 开 | Robust-Z(>3) + IQR(k=1.5) 双判据（数值/可解析日期列） | DIST |
 | 类别 categorical | `categorical.py` | 开 | 低频值与高频锚点相似度判 typo（`categorical_typo`）；字符模式占比过低判格式簇（`format_cluster`） | T / FI |
-| 形态离群 pattern_outlier | `pattern_outlier.py` | 开 | 高基数格式化字段（日期/编号）的形态串离群 + 日期可解析性校验，补重构/统计/类别的盲区 | FI |
+| 形态离群 pattern_outlier | `pattern_outlier.py` | 开 | 高基数格式化字段（日期/编号）的形态串离群 + 日期可解析性校验，补重构/统计/类别的盲区；另含**次级格式簇**路径（`secondary_format`）：日期列以粗形态（字母块→A/数字块→N）聚簇，主导格式 ≥60% 时把占比 2%~40% 的次级簇（如 `Apr 17, 1981 Wide` vs 主导 `17 April 1981 (USA)`）低分交融合/Stage 3 裁决；子序列过滤排除合法的截断粒度变体（`May 1985 (USA)` 缺日仍为主导格式的子序列，实测多合法），仅报结构重排/加长的簇（movies/flights 实测 429 格检出零误报） | FI |
+| 数值格式 numeric_format | `numeric_format.py` | 开 | 数值列「数值元数」一致性：干净子集估主导 token 数，多值/掺杂串（如 `'2010 2011 2012'`）标 FI | FI |
 | 近邻 neighbor_consistency | `neighbor_consistency.py` | 开 | KNN 近邻一致性：数值偏离/类别多数不符 | DIST / VAD |
-| 近似FD approx_fd | `fd_detector.py` | 关 | 统计挖掘近似 FD，可选 LLM 语义校验；**默认关（已迁回 Stage 1 双轨 FD）** | VAD |
-| 关联规则 association | `association_rule.py` | 关 | 单前件高置信关联规则违反 | VAD |
-| 聚类 clustering | `clustering.py` | 关 | LOF 行级离群后逐列定位（权重低） | DIST |
+| 异常高频重复值 value_burst | `value_burst.py` | 开 | 高多样性列（distinct_ratio ≥0.15）中的"默认值/占位值批量注入"：日期样式列的任何高频重复值（如 rayyan 重复数十次的 `1/1/14`）；或孤立尖峰（top1 ≥10× top2，如 `{NULL}`）。值本身格式合法且高频，其余检测器全部放过 | VAD/FI |
+
+早期版本中的近似 FD（被 Stage 1 双轨 FD 取代）、关联规则、聚类 LOF（与统计/近邻同质且不用 clean_mask）三个检测器已删除。
 
 CLI：`--all-detectors` 一键全开；`--detectors a,b,c` 指定子集。`DetectorContext` 携带 `kinds/semantic_types/encoder/x_all/row_clean` 供各检测器复用，避免重复计算。
 
@@ -272,15 +287,15 @@ CLI：`--all-detectors` 一键全开；`--detectors a,b,c` 指定子集。`Detec
 - **身份保留编码**：类别基数上限提到 500，键列（如 `flight`）与中等基数列以 one-hot 身份进入输入并作可预测目标，使 `P(time|flight)` 可学，修复键→值冲突检测；仅超高基数自由文本列走 surrogate 通道
 - **伪干净训练（`reconstruction_pseudo_clean`，默认开）**：以 clean_mask（此时仅标 high 级错误）逐行统计错误数——整行干净行进训练；**恰含 1 个错误的行也进训练但屏蔽该错误格**（输入中性化 + 损失屏蔽）；≥2 错误行删除。在干净行稀缺的数据集（如 hospital）显著优于纯整行干净训练，数据充足时等价；伪干净行过少则回退严格整行干净
 - **判定：双闸门 + 绝对概率地板并集**：相对分位阈值（`quantile`，默认 0.99）与类别绝对概率地板（`abs_prob_floor`，默认 0.02）取并集提升召回，再叠加类别精度闸门（`margin`）与可预测性闸门（`min_predictability`，干净集 top-1 准确率 <0.5 的列整列跳过）抑制误报
-- **可选**：掩码推理（`masked_inference`）/ 迭代掩码推理（`masked_inference_iters>1`）把已确认脏的单元格在上下文中中性化，隔离脏上下文传播；CDF 归一化（`cdf_normalize`）使跨列分数可比；词表去污（`vocab_denoise`）用编辑距离剔除混入类别词表的漏报 typo
+- **可选**：掩码推理（`masked_inference`）/ 迭代掩码推理（`masked_inference_iters>1`）把已确认脏的单元格在上下文中中性化，隔离脏上下文传播；词表去污（`vocab_denoise`）用编辑距离剔除混入类别词表的漏报 typo
 - **设备**：`device=auto`（有 GPU 自动用，否则 CPU）
 
 ### 3.5 融合策略（`fusion.py`）
 
-- **归一化**：软检测器（重构/统计/近邻/聚类）按 detector 内分位排名归一化到 [0,1]；硬/规则检测器直接用置信度（NaN/≤0 → 默认 0.9）
-- **加权独立乘积融合**：每格每检测器取最强证据后，`suspicion_score = 1 - ∏(1 - wₐ · sₐ)`，权重按检测器可靠性配置：`strong_rule 1.0 > approx_fd/fd 0.9 > reconstruction 0.85 > association/typo 0.8 > neighbor 0.75 > statistical/format_cluster/pattern 0.6 > approx_fd_medium 0.5 > clustering 0.4`
+- **归一化**：软检测器（重构/统计/近邻）按 detector 内分位排名归一化到 [0,1]；硬/规则检测器直接用置信度（NaN/≤0 → 默认 0.9）
+- **加权独立乘积融合**：每格每检测器取最强证据后，`suspicion_score = 1 - ∏(1 - wₐ · sₐ)`，权重按检测器可靠性配置：`strong_rule 1.0 > approx_fd 0.9 > reconstruction/numeric_format 0.85 > typo 0.8 > neighbor 0.75 > statistical/format_cluster/pattern/value_burst 0.6 > approx_fd_medium/secondary_format 0.5`
 - **分层**：`confidence_tier = high(≥0.85) / mid(≥0.60) / low`，`low` 不丢弃以保召回
-- **独立证据族计数（`family_count`）**：把检测器映射到证据「族」（rule/model/statistical/neighbor/pattern/text），同族只算一次，避免同质证据堆叠虚高；跨族命中越多越可能是真错，供 Stage 3 优先保留（缓解精检后召回下降）
+- **独立证据族计数（`family_count`）**：把检测器映射到证据「族」（rule/model/statistical/neighbor/pattern/format/text），同族只算一次，避免同质证据堆叠虚高；跨族命中越多越可能是真错，供 Stage 3 优先保留（缓解精检后召回下降）
 - **来源与证据**：`source` 标注主证据来自 stage1/stage2；`detectors` 记录命中检测器集合；`evidence` 与 `candidate_fixes` 汇总多源证据与候选修复
 
 ### 3.6 优势与创新点
@@ -294,7 +309,9 @@ CLI：`--all-detectors` 一键全开；`--detectors a,b,c` 指定子集。`Detec
 
 ---
 
-## 4. Stage 3：LLM 精检层
+## 4. Stage 3：语义裁决层（Semantic Arbitration Layer）
+
+> 命名释义：本层不重新检测，而是让 LLM 作为**裁决者**基于结构化证据包对每个候选做最终判决——确认真错、否决误报、修正类型、标准化修复；同时以不对称保护约束裁决权：确定性信号不容 LLM 单方面推翻。
 
 ### 4.1 输入输出
 
@@ -317,7 +334,7 @@ CLI：`--all-detectors` 一键全开；`--detectors a,b,c` 指定子集。`Detec
 Stage 3 不是重新检测，而是基于为每个候选构建的**结构化证据包**做语义裁决：
 
 - **整行值**：支持跨列一致性判断（如 city/state/zip）
-- **同列正常样例（默认 top-8）+ 列统计画像**：空值率、高频值、主导模式、数值范围，支撑分布级判断
+- **同列正常样例（默认 top-8）+ 列统计画像**：空值率、高频值、主导模式、数值范围，支撑分布级判断（**紧贴各可疑格注入**；实测将列级证据抽到独立段按列共享会使 beers 标准化类真错召回大幅下降，故不采用）
 - **跨行共识**：自动探测 key 列（`min_avg_group` 默认 3.0），对同 key 多记录冲突给出多数值与冲突标记；用 `min_dominance`(0.5) 与 `min_lift`(0.15) 门槛排除类别不平衡造成的伪共识
 - **多检测器融合证据**：`detectors / suspicion_score / confidence_tier / family_count / evidence / candidate_fixes`
 - **分层过滤**：`load_contexts(min_tier=...)` + `--min-tier {low,mid,high}`，只精检 ≥ 该层级的候选（默认 low=全部），直接减少 LLM 调用
@@ -328,8 +345,9 @@ Stage 3 不是重新检测，而是基于为每个候选构建的**结构化证�
 
 - **duplicate_value 直通**：`AUTO_CONFIRM_RULES={"duplicate_value"}`，高置信确定性结构错误直接确认（`confidence=0.95`），跳过 LLM
 - **MV 保护**（`protect_stage1_mv`，默认开）：Stage 1 确定性缺失值即使 LLM 判非错也维持为 MV
-- **共识冲突保护**：Stage 2 共识冲突候选被 LLM 以低于 `reject_conf_threshold`(0.85) 的把握判 NONE 时驳回，维持为错误并补多数值修复（`fix_source=consensus`）
-- **解析失败回退**：LLM 未返回某格判定或整行调用异常时，保守维持为错误（`confidence=0.5`，沿用前序类型与修复）
+- **共识冲突保护（分档）**：Stage 2 共识冲突候选被 LLM 判 NONE 时，按证据强度分档决定否决门槛——强冲突用 `reject_conf_threshold`(0.98) 近乎无条件维持为错误；弱冲突退回 0.85 宽松阈值。弱冲突判据（满足其一）：a) `current_share >= 0.3`（本值自身也是组内常见值，如同县多家医院的不同地址）；b) `group_size > 100`（真实体组天然较小——flights 同航班组中位 20、hospital 同县组 26~48；超大组是"类别桶"伪共识，如 billionaire 全部 not inherited 的人构成组中位 1488 的桶，组内多样性天然合法）。驳回时补多数值修复（`fix_source=consensus`）。依据 flights/hospital/billionaire 归因：flights 被误杀真错的 LLM 否决置信度中位数 0.95（0.85 拦不住）；hospital 被 0.98 全档误保护的格全为合法次值；billionaire 类别桶伪共识误保护 137 格
+- **异常高频重复值保护**：`value_burst` 命中的 stage2 候选被 LLM 判 NONE 且把握 < `reject_conf_threshold` 时驳回，维持为 FI——LLM 的"高频/常见/格式合法=正常"直觉恰与占位值注入信号相反（rayyan 实测 prompt 明示原则后仍有 217/400 真错被此类理由否决）
+- **解析失败回退**：响应先经宽松 JSON 解析（markdown 围栏剥离 + 首尾大括号子串回退），解析失败自动重试一次；仍未返回某格判定或整行调用异常时，保守维持为错误（`confidence=0.5`，沿用前序类型与修复）
 
 ### 4.5 修复闭环与来源
 
@@ -339,12 +357,14 @@ Stage 3 不是重新检测，而是基于为每个候选构建的**结构化证�
 
 ### 4.6 性能优化
 
-- **多线程并发**：`verify_contexts` 用 `ThreadPoolExecutor(max_workers)`（默认 8）逐行并发调用 LLM，结果按原序扁平化
-- **Prompt 级缓存**（`cache.py`）：以 `SYSTEM_PROMPT_VERSION + user_prompt` 的哈希为键复用 LLM 响应，模板变更改版本号自动失效
-- **静态 system prompt**：任务说明与输出规范放在静态 system 段（利于前缀缓存），动态证据放 user 段
+- **多线程并发**：`verify_contexts` 用 `ThreadPoolExecutor(max_workers)`（默认 16，消融验证 F1 持平、墙钟约减半）逐行并发调用 LLM，结果按原序扁平化
+- **Prompt 级缓存**（`cache.py`）：以 `SYSTEM_PROMPT_VERSION + user_prompt` 的哈希为键复用 LLM 响应，模板变更改版本号自动失效；缓存文件按数据集拆分（`cache/{dataset}_stage3_cache.json`），独立运行与流水线共享同一路径；仅缓存解析成功的响应
+- **静态 system prompt**：任务说明与输出规范放在静态 system 段（利于前缀缓存），动态证据放 user 段；`reason` 要求 ≤15 字极简理由
 - **`enable_thinking`**（默认 False）：关闭 qwen3 等推理模型的思考模式，省 completion token
-- **`dedup_context_free`**（默认关）：仅对上下文无关类型（MV/DMV/T/FI 且可验证、无共识、非 stage2）按 `(column, value, 类型)` 跨行复用判定
-- **`min_tier` 过滤**：分层过滤减少候选格与行分组数
+- **`mv_passthrough`**（默认开）：Stage 1 确定性 MV 直通确认跳过 LLM——MV 保护本就不允许 LLM 否决，直通为理论无损的纯省调用（rayyan/hospital 消融 F1 变化 ≤0.001）
+- **`dmv_passthrough`**（默认关）：Stage 1 DMV 直通确认跳过 LLM（rayyan/hospital 消融容差内，保守默认关）
+- **`dedup_context_free`**（默认关）：仅对上下文无关类型（MV/DMV/T/FI 且可验证、无共识、非 stage2）按 `(column, value, 类型)` 跨行复用判定。6 数据集消融：beers +0.031（同值判定一致化救回被零星否决的标准化错误）、flights +0.003、rayyan/hospital/billionaire 容差内、movies -0.006（略超 ±0.005 容差），故默认保持关；beers 类标准化错误密集的数据集建议显式开启
+- **`min_tier` 过滤**：分层过滤减少候选格与行分组数；实测 flights 上收紧到 `mid` 使 F1 0.798→0.758（low 层含真错），不建议默认收紧
 
 ### 4.7 优势与创新点
 
@@ -372,13 +392,26 @@ Stage 3 不是重新检测，而是基于为每个候选构建的**结构化证�
 
 ---
 
-## 6. 框架级创新点小结
+## 6. 框架级创新点小结（论文视角）
 
-1. **漏斗式三层递进架构**：以精度—召回—语义逐层收敛，规则筑底、检测器补漏、LLM 精检，各层职责清晰且互补
-2. **LLM 的分层协同**：归纳规则、灰区仲裁、语义校验、逐格精检多种角色分工，且确定性错误始终不被 LLM 单方面推翻
-3. **统一依赖规则族 + 分档验证**：FD/CFD/DC 以统一骨架挖掘与验证，统计强直通、灰区 LLM 三档审核、统计弱丢弃，并经冲突消解择一，把 LLM 精准投放到模糊边界
-4. **双轨可信度贯穿知识传递**：`severity(high/medium)` 决定是否进 clean_mask 与融合权重，避免不确定规则污染下游训练分布
-5. **统一条件预测 + 身份保留编码 + 伪干净训练**：单模型覆盖分布异常与依赖冲突，突破按类型切换检测器的局限，并缓解高错密度数据集训练行稀缺
-6. **多源证据融合与分层 + 证据族计数**：加权独立乘积可疑度 + 置信分层 + 跨族一致性，为语义精检提供可解释输入
-7. **不对称保护 + 证据包精检**：以结构化上下文和「低门槛确认、高门槛否决」实现降误报而不牺牲召回
-8. **检测—修复—评估一体化**：修复标准化与映射传播，配合修复准确率评估，形成可度量的完整闭环
+### 6.1 四大总纲性创新
+
+1. **基于大语言模型的漏斗式表格错误检测（LLM-based Funnel Architecture）**：首创「规则锚定 → 证据网罗 → 语义裁决」三层漏斗，以**精度—召回—语义逐层收敛**组织检测流程；LLM 贯穿全程但每层角色不同（归纳者/灰区仲裁者 → 语义校验者 → 逐格裁决者），检测执行始终由确定性代码与统计模型完成，兼得 LLM 的语义理解与传统方法的稳定可复现
+2. **完全无监督（Fully Unsupervised）**：全程不依赖任何标注数据、干净样本或用户反馈——规则由 LLM 从统计画像归纳，检测阈值从 Stage 1 自举出的干净掩码上估计，训练数据经伪干净策略自动构造，ground truth 仅用于离线评估
+3. **无配置开箱即用（Configuration-free / Zero-tuning）**：同一套默认配置在航班、医院、啤酒、电影、富豪、文献六个领域迥异的数据集上直接运行且均达高 F1，无需按数据集调参——列语义由 LLM 推断、规则按数据自动归纳与验证、检测器阈值自适应估计，把「配置知识」内化为框架能力
+4. **多检测器融合（Multi-detector Fusion）**：神经重构、统计、类别、形态、格式、近邻、高频突发等互补检测器并行撒网，以**加权独立乘积**做概率式证据合并，输出可解释的分层可疑度与跨族一致性计数，供下游裁决
+
+### 6.2 亮眼的机制级创新
+
+5. **归纳—执行解耦的 LLM 用法（Induce-then-Execute Paradigm）**：LLM 只产出「可编译的规则」（regex/值域/类型/标准化规格/算术约束），执行交给确定性编译器（含 AST 白名单安全求值），既获得语义泛化又杜绝 LLM 逐格判定的不稳定与天价 token——与「把 LLM 当检测器逐格问」的路线形成鲜明对比
+6. **不对称裁决权约束（Asymmetric Arbitration Protection）**：奉行「确定性信号不交给 LLM 推翻，模糊边界才用 LLM」——确认低门槛、否决高门槛，并按证据强度分档（强共识冲突近乎无条件保护、类别桶伪共识退回宽松阈值）；解决了 LLM「高频/格式合法=正常」直觉与占位值注入等系统性错误信号相悖的根本问题
+7. **双轨可信度驱动的知识传递（Dual-track Severity Propagation）**：Stage 1 以 `severity(high/medium)` 区分「确定性错误」与「弱证据」，仅 high 级进入干净掩码净化下游训练分布，medium 级降权参与融合——不确定知识既不丢弃也不污染，贯穿三层的置信度治理
+8. **统一条件预测模型 + 身份保留编码 + 伪干净训练**：单一 masked-column 模型同时覆盖分布异常与函数依赖式冲突（键→值冲突），突破按错误类型切换专用检测器的局限；伪干净训练（单错屏蔽行也入训）缓解高错密度数据集干净行稀缺
+9. **统一依赖规则族与三档验证（Tiered Rule Validation）**：FD/CFD/DC 以统一骨架挖掘，按 `support/confidence/bootstrap 稳定性` 分流——统计强直通、统计弱丢弃、仅灰区交 LLM 三档审核，再经冲突消解择一；把昂贵的 LLM 调用精准投放到真正模糊的边界上
+10. **证据包上下文工程（Evidence-package Context Engineering）**：Stage 3 的每个候选携带整行值、列画像、正常样例、跨行共识、多检测器证据与候选修复的结构化证据包，使 LLM 从「看单值猜」升级为「据证裁决」；证据紧贴可疑格注入的布局经消融验证优于列级共享
+11. **检测—修复—评估一体化闭环（Detect-Repair-Evaluate Loop）**：不止定位错误，还输出带来源与置信度的标准化修复（LLM/共识/规则/映射传播四类来源），并以 correction-level 修复准确率闭环度量「修得对不对」
+12. **成本感知的系统设计（Cost-aware Design）**：画像代替原始数据喂 LLM、规则/审核/prompt 三级缓存（含版本失效）、确定性直通跳过 LLM、分层过滤、按行分组、多线程并发——在六数据集上以极低 token 预算达成高 F1，检测成本可控可预算
+
+### 6.3 一段话总结（可用于论文引言/结论）
+
+> 本框架提出一种**完全无监督、无需配置**的漏斗式表格错误检测范式：以 LLM 归纳、确定性执行的规则锚定层筑底，以多检测器融合的证据网罗层补漏，以证据包驱动、受不对称保护约束的 LLM 语义裁决层收口。三层通过干净掩码、规则先验与融合候选传递知识，形成「检测—修复—评估」的完整闭环；LLM 的语义能力被精准投放到规则归纳、灰区仲裁与语义裁决三个高杠杆位置，而非逐格蛮力判定，从而在六个领域迥异的真实数据集上以单一默认配置同时取得高精度、高召回与可控成本。

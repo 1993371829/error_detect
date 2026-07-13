@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="只构造/打印 prompt，不调 LLM")
     p.add_argument("--no-cache", action="store_true", help="禁用响应缓存")
     p.add_argument("--reject-conf-threshold", type=float, default=None,
-                   help="共识冲突候选被 LLM 否决所需的最低把握（默认 0.85）")
+                   help="共识冲突候选被 LLM 否决所需的最低把握（默认 0.98）")
     p.add_argument("--min-avg-group", type=float, default=None,
                    help="探测 key 列的平均每取值行数门槛（默认 3.0）")
     p.add_argument("--min-dominance", type=float, default=None,
@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-tier", default=None, choices=["low", "mid", "high"],
                    help="仅精检置信度分层 >= 该层级的候选（默认 low=全部）")
     p.add_argument("--max-workers", type=int, default=None,
-                   help="Stage3 LLM 并发线程数（默认 8；1=串行）")
+                   help="Stage3 LLM 并发线程数（默认 16；1=串行）")
     thinking = p.add_mutually_exclusive_group()
     thinking.add_argument("--no-thinking", dest="thinking", action="store_false", default=None,
                           help="关闭 qwen3 思考模式（省 completion token）")
@@ -76,6 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
                           help="开启 qwen3 思考模式")
     p.add_argument("--dedup-context-free", action="store_true", default=None,
                    help="上下文无关格(MV/DMV/T/FI)按(列,值,类型)复用判定，省调用/ token")
+    p.add_argument("--mv-passthrough", action="store_true", default=None,
+                   help="Stage1 确定性 MV 直通确认跳过 LLM（MV 本就不可被否决，纯省调用）")
+    p.add_argument("--dmv-passthrough", action="store_true", default=None,
+                   help="Stage1 DMV 直通确认跳过 LLM（需消融验证）")
     return p
 
 
@@ -119,6 +123,10 @@ def main(argv: list[str] | None = None) -> None:
         cfg.enable_thinking = args.thinking
     if args.dedup_context_free is not None:
         cfg.dedup_context_free = args.dedup_context_free
+    if args.mv_passthrough is not None:
+        cfg.mv_passthrough = args.mv_passthrough
+    if args.dmv_passthrough is not None:
+        cfg.dmv_passthrough = args.dmv_passthrough
 
     df, contexts = load_contexts(
         cfg.paths.input_csv, cfg.paths.candidates, cfg.paths.rules,
@@ -153,7 +161,8 @@ def main(argv: list[str] | None = None) -> None:
     cache = None if args.no_cache else ResponseCache(cfg.paths.cache)
 
     print(f"  [stage3] 并发={cfg.max_workers}, 思考模式={cfg.enable_thinking}, "
-          f"上下文无关去重={cfg.dedup_context_free}")
+          f"上下文无关去重={cfg.dedup_context_free}, "
+          f"MV直通={cfg.mv_passthrough}, DMV直通={cfg.dmv_passthrough}")
     results = verify_contexts(
         contexts, llm, cache=cache,
         reject_conf_threshold=cfg.reject_conf_threshold,
@@ -161,6 +170,8 @@ def main(argv: list[str] | None = None) -> None:
         max_workers=cfg.max_workers,
         enable_thinking=cfg.enable_thinking,
         dedup_context_free=cfg.dedup_context_free,
+        mv_passthrough=cfg.mv_passthrough,
+        dmv_passthrough=cfg.dmv_passthrough,
     )
     results = propagate_fix_mappings(results)
     results_df = pd.DataFrame(results).reindex(columns=RESULT_COLUMNS)

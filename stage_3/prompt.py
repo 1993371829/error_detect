@@ -47,9 +47,8 @@ PROMPT_HEADER = """你是表格数据质量审核专家。下面给你一行数�
 4. 若提供 multi_detector_evidence（多检测器证据融合）:
    - detectors 列出命中本格的检测器；命中越多、suspicion_score 越高、confidence_tier 越高，
      越可能是真错误。多个独立检测器一致指向同一格时应提高判定为错误的把握。
-   - independent_family_count 为命中的**独立证据族**数（规则/模型/统计/近邻/模式/文本），仅供参考：
-     多族一致**不必然**是真错——高基数/自由格式列上多个无监督检测器常对同一正常值系统性同时误报。
-     务必回到该值本身是否语义/事实错误来判断，不能仅因族数高就判为错误。
+   - independent_family_count 为命中的**独立证据族**数（规则/模型/统计/近邻/模式/文本）：
+     跨族一致比同族多个检测器更有力，该值 >=2 时应显著提高判定为错误的把握。
    - candidate_fixes 汇总各检测器给出的候选修复值，可作为 suggested_fix 的参考。
 5. 对确实是错误的，请给出标准化的正确值 suggested_fix（old->new 映射思路）:
    - 优先映射到该列 value_frequencies / normal_samples 中已存在的规范表示
@@ -71,14 +70,21 @@ OUTPUT_SPEC = """## 输出（只输出 JSON，不要任何解释）
       "error_type": "MV|DMV|T|VAD|FI|OTHER|NONE",
       "confidence": 0.0,
       "suggested_fix": "标准化后的正确值，或 null",
-      "reason": "简短理由（说明判定依据，非推理模型据此稳定判定）"
+      "reason": "≤15字极简理由"
     }
   ]
 }"""
 
 # 静态系统提示词：任务说明 + 输出规范，跨行完全一致 -> 放入 system 消息命中前缀缓存。
 # 版本号：模板变更时改此值，使响应缓存键失效，避免复用旧 prompt 的结果。
-SYSTEM_PROMPT_VERSION = "v3"
+# 注：v3（弱化 family_count + 放宽 reason 长度）在 beers 上使标准化类真错被大量否决
+# （R 0.842->0.672）；v4（normal_samples/column_stats 抽到按列共享的"列参考信息"段 +
+# evidence 截断）进一步恶化（R 0.589）——列级证据必须紧贴各可疑格注入，
+# LLM 才稳定遵从"多种写法应判 FI"的原则。v5（追加 value_burst 判定原则）使 beers
+# abv 百分号类标准化真错被"高频合法"话术大量否决（F1 0.975->0.912）：对 value_burst
+# 强调"高频不等于合法"反而让 LLM 对无该证据的格反向推出"高频=合法"。三版均已回退，
+# 维持 v2；value_burst 候选的召回由 verifier 的异常高频重复值保护（不依赖 prompt）兜底。
+SYSTEM_PROMPT_VERSION = "v2"
 SYSTEM_PROMPT = f"{PROMPT_HEADER}\n{OUTPUT_SPEC}"
 
 

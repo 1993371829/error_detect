@@ -142,21 +142,25 @@ def detect_swaps(df: pd.DataFrame, full_col: str, abbrev_col: str) -> list[dict]
          （is_abbrev(full_val, abbrev_val) 成立而反向不成立）=> 两列疑似对调。
     """
     errors: list[dict] = []
+    full_vals = df[full_col].to_numpy()
+    abbrev_vals = df[abbrev_col].to_numpy()
     for i in range(len(df)):
-        va, vb = df[full_col][i], df[abbrev_col][i]
+        va, vb = full_vals[i], abbrev_vals[i]
         if is_blank(va) or is_blank(vb):
             continue
         va, vb = str(va), str(vb)
         if is_abbrev(va, vb) and not is_abbrev(vb, va):
             # full 列存的是缩写、abbrev 列存的是全名 -> 对调
+            # 用 df.index 取真实 row_id（与评估/掩码对齐），而非位置下标
+            row_id = df.index[i]
             errors.append({
-                "row_id": i, "column": full_col, "value": va,
+                "row_id": row_id, "column": full_col, "value": va,
                 "error_type": "FI", "violated_rule": "column_swap",
                 "reason": f"疑似与列 '{abbrev_col}' 对调：'{full_col}' 应为全名却存了缩写",
                 "suggested_fix": vb, "confidence": 0.85,
             })
             errors.append({
-                "row_id": i, "column": abbrev_col, "value": vb,
+                "row_id": row_id, "column": abbrev_col, "value": vb,
                 "error_type": "FI", "violated_rule": "column_swap",
                 "reason": f"疑似与列 '{full_col}' 对调：'{abbrev_col}' 应为缩写却存了全名",
                 "suggested_fix": va, "confidence": 0.85,

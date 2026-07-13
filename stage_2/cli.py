@@ -63,8 +63,6 @@ def build_parser() -> argparse.ArgumentParser:
                         help="掩码推理：预测时中性化 Stage1 确认脏的上下文单元格（隔离脏上下文传播）")
     parser.add_argument("--masked-inference-iters", type=int, default=None,
                         help="迭代式掩码推理轮数（>1 把上一轮 Stage2 候选并入脏集重打分，松绑同行互相掩护）")
-    parser.add_argument("--cdf-normalize", action="store_true",
-                        help="输出 norm_score 为分数在干净分布上的累积分位（跨列可比）")
     parser.add_argument("--vocab-denoise", action="store_true",
                         help="训练前用编辑距离自过滤剔除混入类别词表的漏报 typo")
     parser.add_argument("--max-cardinality", type=int, default=None,
@@ -73,10 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default=None, choices=["auto", "cpu", "cuda"],
                         help="计算设备：auto（默认，有 GPU 自动用）/ cuda / cpu")
     parser.add_argument("--all-detectors", action="store_true",
-                        help="启用全部 Stage2 检测器（重构/统计/低频拼写/关联/近似FD/近邻/聚类/形态离群）")
+                        help="启用全部 Stage2 检测器（重构/统计/低频拼写/近邻/形态离群/数值格式）")
     parser.add_argument("--detectors", default=None,
                         help="逗号分隔指定启用的检测器，覆盖默认；可选: "
-                             "reconstruction,statistical,categorical,association,fd,neighbor,clustering,pattern,numeric_format")
+                             "reconstruction,statistical,categorical,neighbor,pattern,"
+                             "numeric_format,value_burst")
     return parser
 
 
@@ -112,8 +111,6 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.scoring.masked_inference_iters = args.masked_inference_iters
         if args.masked_inference_iters > 1:
             cfg.scoring.masked_inference = True
-    if args.cdf_normalize:
-        cfg.scoring.cdf_normalize = True
     if args.vocab_denoise:
         cfg.scoring.vocab_denoise = True
     if args.max_cardinality is not None:
@@ -124,8 +121,7 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         cfg.model.device = args.device
 
     _ALL = ["reconstruction", "statistical", "categorical",
-            "association", "fd", "neighbor", "clustering", "pattern",
-            "numeric_format"]
+            "neighbor", "pattern", "numeric_format", "value_burst"]
     if args.all_detectors:
         for name in _ALL:
             setattr(cfg.detectors, name, True)
@@ -134,22 +130,6 @@ def _resolve_config(args: argparse.Namespace) -> Stage2Config:
         for name in _ALL:
             setattr(cfg.detectors, name, name in chosen)
     return cfg
-
-
-def _maybe_build_llm():
-    """构建 LLM 客户端供 FD 语义校验；无密钥或初始化失败时返回 None（退化为纯统计）。"""
-    from stage_1.config import Stage1Config
-    from stage_1.llm_rules import LLMClient
-
-    s1_cfg = Stage1Config.resolve()
-    if not s1_cfg.llm.api_key:
-        print("[info] 未配置 LLM 密钥，FD 检测跳过语义校验（纯统计高召回）。")
-        return None
-    try:
-        return LLMClient(s1_cfg)
-    except Exception as exc:  # noqa: BLE001 - 初始化失败时安全退化
-        print(f"[warn] LLM 初始化失败，FD 检测退化为纯统计：{exc}")
-        return None
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -187,9 +167,6 @@ def main(argv: list[str] | None = None) -> None:
     rules_path = resolve_dataset_paths(cfg.paths.input_csv).rules
     semantic_types = load_semantic_types(rules_path)
 
-    # FD 检测器默认做 LLM 语义校验：有可用密钥则注入 LLM，否则退化为纯统计高召回。
-    llm = _maybe_build_llm() if cfg.detectors.fd else None
-
     print(f"启用检测器: {', '.join(cfg.detectors.enabled())}")
     candidates, _ = run_stage2(
         df, clean_mask,
@@ -204,10 +181,8 @@ def main(argv: list[str] | None = None) -> None:
         max_cells_per_row=cfg.scoring.max_cells_per_row,
         masked_inference=cfg.scoring.masked_inference,
         masked_inference_iters=cfg.scoring.masked_inference_iters,
-        cdf_normalize=cfg.scoring.cdf_normalize,
         detectors=cfg.detectors,
         semantic_types=semantic_types,
-        llm=llm,
     )
 
     out = Path(cfg.paths.candidates_out)

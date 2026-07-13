@@ -16,9 +16,8 @@ Stage 2 打分与输出：基于统一条件预测模型的逐格似然/残差�
       不受分位数限制，直接抓"在上下文里本就极不可能"的低概率冲突取值。
 
 输出 schema:
-    row_id, column, value, error_type(=DIST), anomaly_score, norm_score,
+    row_id, column, value, error_type(=DIST), anomaly_score,
     col_contribution, suggested_fix, subtype
-    （norm_score：cdf_normalize 开启时为分数在干净分布上的累积分位 [0,1]，否则等于 anomaly_score）
 """
 
 from __future__ import annotations
@@ -165,7 +164,6 @@ def flag_suspicious_cells(
     abs_prob_floor: float = 0.0,
     min_clean: int = 20,
     max_cells_per_row: int = 0,
-    cdf_normalize: bool = False,
 ) -> pd.DataFrame:
     """对每列计算分数并按干净分位阈值 + 绝对概率地板（并集）+ 精度闸门筛出可疑单元格。"""
     n = len(df)
@@ -206,23 +204,14 @@ def flag_suspicious_cells(
         if info["margin"] is not None:
             flag = flag & (info["margin"] >= margin)
 
-        # CDF 归一化：把分数映射到其在该列干净分布上的累积分位（[0,1]），
-        # 使不同列（-logP / 残差 / MSE）的分数跨列可比；不改变判定逻辑。
-        clean_sorted = np.sort(scores[thr_mask]) if cdf_normalize else None
-
         for pos in np.where(flag)[0]:
             s = float(scores[pos])
-            if cdf_normalize:
-                norm = float(np.searchsorted(clean_sorted, s) / len(clean_sorted))
-            else:
-                norm = s
             records.append({
                 "row_id": df.index[pos],
                 "column": spec.name,
                 "value": df.iloc[pos][spec.name],
                 "error_type": "DIST",
                 "anomaly_score": s,
-                "norm_score": norm,
                 "col_contribution": s,
                 "suggested_fix": info["suggested_fix"][pos],
                 "subtype": spec.target_kind,
@@ -230,12 +219,11 @@ def flag_suspicious_cells(
 
     result = pd.DataFrame(records, columns=[
         "row_id", "column", "value", "error_type",
-        "anomaly_score", "norm_score", "col_contribution", "suggested_fix", "subtype",
+        "anomaly_score", "col_contribution", "suggested_fix", "subtype",
     ])
     if max_cells_per_row and not result.empty:
-        # 跨列截断按归一化分数排序（cdf_normalize 关闭时 norm_score == anomaly_score）
         result = (
-            result.sort_values("norm_score", ascending=False)
+            result.sort_values("anomaly_score", ascending=False)
             .groupby("row_id", group_keys=False)
             .head(max_cells_per_row)
             .reset_index(drop=True)
@@ -299,7 +287,7 @@ def _build_pseudo_clean(
 def _run_reconstruction(
     df, specs, x_all, clean_mask, model, *,
     quantile, margin, min_predictability, abs_prob_floor,
-    max_cells_per_row, masked_inference, masked_inference_iters, cdf_normalize,
+    max_cells_per_row, masked_inference, masked_inference_iters,
 ) -> pd.DataFrame:
     """自监督重构通道：训练条件预测模型并逐格打分（含可选迭代掩码推理）。"""
     def _score_with_mask(eff_mask: pd.DataFrame) -> pd.DataFrame:
@@ -309,7 +297,7 @@ def _run_reconstruction(
             df, specs, x_all, preds, clean_mask,
             quantile=quantile, margin=margin,
             min_predictability=min_predictability, abs_prob_floor=abs_prob_floor,
-            max_cells_per_row=max_cells_per_row, cdf_normalize=cdf_normalize,
+            max_cells_per_row=max_cells_per_row,
         )
 
     candidates = _score_with_mask(clean_mask)
@@ -340,10 +328,8 @@ def run_stage2(
     max_cells_per_row: int = 0,
     masked_inference: bool = False,
     masked_inference_iters: int = 1,
-    cdf_normalize: bool = False,
     detectors=None,
     semantic_types: Optional[dict] = None,
-    llm=None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """
     Stage 2 端到端多检测器框架：编码 -> 按配置运行各检测器 -> 汇集统一候选。
@@ -399,7 +385,6 @@ def run_stage2(
             quantile=quantile, margin=margin, min_predictability=min_predictability,
             abs_prob_floor=abs_prob_floor, max_cells_per_row=max_cells_per_row,
             masked_inference=masked_inference, masked_inference_iters=masked_inference_iters,
-            cdf_normalize=cdf_normalize,
         )
         recon_cands = recon_frame_to_candidates(recon_df)
         all_cands += recon_cands
@@ -417,17 +402,6 @@ def run_stage2(
         c = detect_categorical(df, clean_mask, ctx, sim_threshold=detectors.sim_threshold)
         all_cands += c
         print(f"  [categorical] {len(c)} 候选")
-    if detectors.association:
-        from stage_2.detectors.association_rule import detect_association
-        c = detect_association(df, clean_mask, ctx,
-                               min_confidence=detectors.assoc_min_confidence)
-        all_cands += c
-        print(f"  [association] {len(c)} 候选")
-    if detectors.fd:
-        from stage_2.detectors.fd_detector import detect_fd
-        c = detect_fd(df, clean_mask, ctx, semantic_check=llm is not None, llm=llm)
-        all_cands += c
-        print(f"  [approx_fd] {len(c)} 候选")
     if detectors.neighbor:
         from stage_2.detectors.neighbor_consistency import detect_neighbor_consistency
         c = detect_neighbor_consistency(df, clean_mask, ctx, k=detectors.knn_k)
@@ -450,11 +424,11 @@ def run_stage2(
         )
         all_cands += c
         print(f"  [numeric_format] {len(c)} 候选")
-    if detectors.clustering:
-        from stage_2.detectors.clustering import detect_clustering
-        c = detect_clustering(df, clean_mask, ctx)
+    if getattr(detectors, "value_burst", False):
+        from stage_2.detectors.value_burst import detect_value_burst
+        c = detect_value_burst(df, clean_mask, ctx)
         all_cands += c
-        print(f"  [clustering] {len(c)} 候选")
+        print(f"  [value_burst] {len(c)} 候选")
 
     candidates = candidates_to_frame(all_cands)
     return candidates, debug

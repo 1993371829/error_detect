@@ -4,11 +4,11 @@ Stage 3 核心：逐行调用 LLM（带缓存）对可疑单元格做精检，�
 
 from __future__ import annotations
 
-import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+from stage_1.llm_rules import _extract_json
 from stage_3.cache import ResponseCache
 from stage_3.context import RowContext, SuspectCell
 from stage_3.prompt import SYSTEM_PROMPT, SYSTEM_PROMPT_VERSION, build_user_prompt
@@ -37,16 +37,29 @@ def _context_free_eligible(s: SuspectCell) -> bool:
     return str(s.prior_error_type).upper() in _CONTEXT_FREE_TYPES
 # 前序类型 -> 解析失败时的兜底最终类型
 _FALLBACK_TYPE = {"DIST": "OTHER", "": "OTHER"}
-# 缺证据保护：默认否决置信度门槛（低于此值且证据冲突时不允许否决）
-DEFAULT_REJECT_CONF_THRESHOLD = 0.85
+# 缺证据保护：默认否决置信度门槛（低于此值且证据冲突时不允许否决）。
+# flights 归因：被误杀真错的 LLM 否决置信度中位数 0.95（"格式合法/看着合理"式高置信误判），
+# 0.85 阈值形同虚设；提到 0.98 后共识冲突格近乎无条件维持为错误（P 有余量，R 显著回升）。
+DEFAULT_REJECT_CONF_THRESHOLD = 0.98
+# 弱冲突降档：本值在组内占比 >= 该值时（本值自身也是组内常见值，如同县多家医院的
+# 不同地址/电话），冲突证据不足以近乎无条件维持，退回宽松阈值。hospital 归因：被
+# 0.98 档误保护的 19 格全为合法次值（current_share 0.30~0.48）；flights 真错约 75%
+# 的 current_share < 0.3，分档后两边兼顾。
+WEAK_CONFLICT_CURRENT_SHARE = 0.3
+WEAK_CONFLICT_REJECT_THRESHOLD = 0.85
+# 大组降档：真实体组（同一航班/同县医院的重复观测）天然较小（flights 真错组中位 20、
+# hospital 26~48）；group_size 极大的组是"类别桶"伪共识（billionaire 误保护格组中位
+# 1488，如所有 not inherited 的人），组内多样性天然合法，同样退回宽松阈值。
+WEAK_CONFLICT_GROUP_SIZE = 100
 
 
 def _parse_response(raw: str) -> dict:
-    """解析 LLM JSON，返回 列名 -> 判定 dict 的映射；失败返回空。"""
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return {}
+    """解析 LLM JSON，返回 列名 -> 判定 dict 的映射；失败返回空。
+
+    复用 Stage 1 的宽松解析（markdown 围栏剥离 + 首尾大括号子串回退），
+    避免非严格 JSON 输出导致整行候选走保守 fallback（维持为错误）而推高 FP。
+    """
+    data = _extract_json(raw)
     judgments = data.get("judgments", []) if isinstance(data, dict) else []
     out = {}
     for j in judgments:
@@ -104,6 +117,25 @@ def _is_stage1(s: SuspectCell) -> bool:
     return "stage1" in (s.prior_source or "").lower()
 
 
+def _passthrough_judgment(s: SuspectCell, note: str) -> dict:
+    """B1 直通：Stage1 确定性 MV/DMV 跳过 LLM 直接确认（MV 本就有不可否决保护）。"""
+    etype = s.prior_error_type if s.prior_error_type in VALID_TYPES else "OTHER"
+    return {
+        "row_id": None,
+        "column": s.column,
+        "value": s.value,
+        "prior_error_type": s.prior_error_type,
+        "prior_source": s.prior_source,
+        "is_error": True,
+        "error_type": etype,
+        "confidence": 0.95,
+        "suggested_fix": s.suggested_fix or None,
+        "fix_source": "prior_rule" if s.suggested_fix else "",
+        "fix_confidence": 0.95,
+        "llm_reason": f"[直通] {note}",
+    }
+
+
 def _normalize(
     judg: dict,
     s: SuspectCell,
@@ -159,14 +191,52 @@ def _normalize(
             "llm_reason": llm_reason,
         }
 
-    # 缺证据保护：来自分布模型(stage2)、且跨行共识证据表明本值与同 key 多数值冲突时，
-    # 只有当 LLM 以足够高的把握判其为误报，才允许否决；否则维持为错误（保住召回）。
+    # 异常高频重复值保护：value_burst 的证据（高多样性列中某值重复异常多次）在统计上
+    # 已足够强，而 LLM 的"高频/常见/格式合法=正常"直觉恰与该信号相反（rayyan 实测
+    # prompt 明示原则后仍有 217/400 真错被此类理由否决）。同共识保护：仅当 LLM 以
+    # >= reject_conf_threshold 的高把握否决才放行。
     if (
         not is_error
         and _is_stage2(s)
-        and s.consensus_conflict
+        and "value_burst" in str(s.detectors or "")
         and conf < reject_conf_threshold
     ):
+        return {
+            "row_id": None,
+            "column": s.column,
+            "value": s.value,
+            "prior_error_type": s.prior_error_type,
+            "prior_source": s.prior_source,
+            "is_error": True,
+            "error_type": "FI",
+            "confidence": round(conf, 3),
+            "suggested_fix": None,
+            "fix_source": "",
+            "fix_confidence": round(conf, 3),
+            "llm_reason": (
+                f"[保护] 异常高频重复值（占位/默认值注入嫌疑），LLM 以低把握"
+                f"({conf:.2f}<{reject_conf_threshold})判 NONE 被驳回。"
+                f"LLM 原判: {llm_reason or 'NONE'}"
+            ),
+        }
+
+    # 缺证据保护：来自分布模型(stage2)、且跨行共识证据表明本值与同 key 多数值冲突时，
+    # 只有当 LLM 以足够高的把握判其为误报，才允许否决；否则维持为错误（保住召回）。
+    # 分档：本值在组内也占相当比例（弱冲突，可能是合法次值）时用宽松阈值。
+    if not is_error and _is_stage2(s) and s.consensus_conflict:
+        cur_share = float((s.consensus or {}).get("current_share") or 0.0)
+        group_size = int((s.consensus or {}).get("group_size") or 0)
+        weak = (
+            cur_share >= WEAK_CONFLICT_CURRENT_SHARE
+            or group_size > WEAK_CONFLICT_GROUP_SIZE
+        )
+        eff_threshold = (
+            min(WEAK_CONFLICT_REJECT_THRESHOLD, reject_conf_threshold)
+            if weak else reject_conf_threshold
+        )
+    else:
+        eff_threshold = None
+    if eff_threshold is not None and conf < eff_threshold:
         is_error = True
         etype = "VAD" if s.column != s.consensus.get("key_column") else "OTHER"
         if fix is None:
@@ -174,7 +244,7 @@ def _normalize(
             if fix:
                 fix_source = "consensus"
         llm_reason = (
-            f"[保护] LLM 以低把握({conf:.2f}<{reject_conf_threshold})判 NONE，"
+            f"[保护] LLM 以低把握({conf:.2f}<{eff_threshold})判 NONE，"
             f"但同 {s.consensus.get('key_column')} 多数值="
             f"{s.consensus.get('majority_value')!r}(占比 {s.consensus.get('majority_share')})"
             f"与本值冲突，维持为错误。原因: {llm_reason}"
@@ -206,17 +276,30 @@ def verify_row(
     enable_thinking: Optional[bool] = None,
     memo: Optional[dict] = None,
     memo_lock: Optional[threading.Lock] = None,
+    mv_passthrough: bool = False,
+    dmv_passthrough: bool = False,
 ) -> list[dict]:
     """对单行构造 prompt、(缓存或)调用 LLM、解析并返回逐格判定。
 
     - 高置信确定性结构错误（auto_confirm）直接确认；
+    - mv/dmv_passthrough 开启时，Stage1 的确定性 MV/DMV 直通确认（跳过 LLM）；
     - 若 memo 提供（B3 去重开启），上下文无关格命中 (列,值,类型) 记忆则复用、不进 prompt；
     - 若整行可疑格都无需 LLM（全 auto_confirm 或全命中 memo），跳过 LLM 调用。
     """
     memo_hits: dict[int, dict] = {}   # ctx.suspects 下标 -> 复用的判定
+    passthrough: dict[int, dict] = {}  # id(s) -> 直通判定
     llm_suspects = []
     for s in ctx.suspects:
         if s.auto_confirm:
+            continue
+        et = str(s.prior_error_type).upper()
+        if mv_passthrough and et == "MV" and _is_stage1(s):
+            passthrough[id(s)] = _passthrough_judgment(
+                s, "Stage1 确定性缺失值（本就不可被 LLM 否决），直通确认省调用。")
+            continue
+        if dmv_passthrough and et == "DMV" and _is_stage1(s):
+            passthrough[id(s)] = _passthrough_judgment(
+                s, "Stage1 伪缺失占位值，直通确认省调用。")
             continue
         if memo is not None and _context_free_eligible(s):
             key = (s.column, str(s.value), str(s.prior_error_type).upper())
@@ -239,23 +322,35 @@ def verify_row(
         user_prompt = build_user_prompt(prompt_ctx)
         key = _cache_key(user_prompt)
         raw = cache.get(key) if cache else None
-        if raw is None:
-            # 单行 LLM 调用失败（内容审查 400 / 限流 / 网络等）不应拖垮整个并发精检：
+        if raw is not None:
+            by_col = _parse_response(raw)
+        if not by_col:
+            # 缓存 miss 或缓存响应解析不出判定 -> 调 LLM，解析失败再重试一次。
+            # 单行调用失败（内容审查 400 / 限流 / 网络等）不应拖垮整个并发精检：
             # 捕获后对本行回退前序判定（保住召回），继续处理其余行。
-            try:
-                raw = llm.complete(user_prompt, system=SYSTEM_PROMPT, enable_thinking=enable_thinking)
-            except Exception as exc:  # noqa: BLE001
-                print(f"  [stage3][warn] row {ctx.row_id} LLM 调用失败，回退前序判定："
-                      f"{type(exc).__name__}: {str(exc)[:120]}")
-                raw = None
-            if raw is not None and cache:
+            for attempt in range(2):
+                try:
+                    raw = llm.complete(user_prompt, system=SYSTEM_PROMPT, enable_thinking=enable_thinking)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  [stage3][warn] row {ctx.row_id} LLM 调用失败(第{attempt + 1}次)："
+                          f"{type(exc).__name__}: {str(exc)[:120]}")
+                    raw = None
+                    continue
+                by_col = _parse_response(raw)
+                if by_col:
+                    break
+                print(f"  [stage3][warn] row {ctx.row_id} LLM 响应解析失败(第{attempt + 1}次)，"
+                      f"{'重试' if attempt == 0 else '回退前序判定'}")
+            # 仅缓存解析成功的响应，避免坏响应被永久复用
+            if by_col and raw is not None and cache:
                 cache.set(key, raw)
-        by_col = _parse_response(raw) if raw is not None else {}
 
     results = []
     for s in ctx.suspects:
         if s.auto_confirm:
             norm = _auto_confirm_judgment(s)
+        elif id(s) in passthrough:
+            norm = passthrough[id(s)]
         elif id(s) in memo_hits:
             norm = dict(memo_hits[id(s)])  # 复用判定，替换本格标识
             norm["column"], norm["value"] = s.column, s.value
@@ -292,11 +387,14 @@ def verify_contexts(
     max_workers: int = 8,
     enable_thinking: Optional[bool] = None,
     dedup_context_free: bool = False,
+    mv_passthrough: bool = False,
+    dmv_passthrough: bool = False,
 ) -> list[dict]:
     """遍历所有行上下文，返回扁平的逐格判定列表（顺序与输入一致）。
 
     max_workers>1 时用线程池并发调用 LLM（墙钟大降）；dedup_context_free 开启时
-    对上下文无关格按 (列,值,类型) 复用判定（省调用/ token，默认关闭需消融验证）。
+    对上下文无关格按 (列,值,类型) 复用判定；mv/dmv_passthrough 开启时 Stage1 的
+    MV/DMV 直通确认（均默认关闭，需消融验证后采纳）。
     """
     total = len(contexts)
     memo: Optional[dict] = {} if dedup_context_free else None
@@ -306,6 +404,7 @@ def verify_contexts(
         return verify_row(
             ctx, llm, cache, reject_conf_threshold, protect_stage1_mv,
             enable_thinking=enable_thinking, memo=memo, memo_lock=memo_lock,
+            mv_passthrough=mv_passthrough, dmv_passthrough=dmv_passthrough,
         )
 
     row_results: list[Optional[list[dict]]] = [None] * total
