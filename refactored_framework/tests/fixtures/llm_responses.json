@@ -1,0 +1,5 @@
+{
+  "structure": {"columns": [], "constraints": []},
+  "audit": {"remove_constraint_ids": [], "add_constraints": []},
+  "labels": {"labels": []}
+}

@@ -1,0 +1,13 @@
+name,city,state,age,Duration
+alice,Austin,TX,25,109 min
+bob,Austin,TX,30,120 min
+carol,Austin,TX,40,143 min
+dan,Austin,TX,35,90 min
+eve,Boston,MA,28,100 min
+fred,Boston,MA,33,110 min
+gina,Boston,MA,44,120 min
+hank,Boston,MA,52,140 min
+ian,Austin,MA,26,100 min
+jo,Boston,MA,-5,110 min
+,Austin,TX,32,90 min
+kim,Boston,MA,29,100 min

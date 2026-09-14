@@ -1,0 +1,20 @@
+seed: 42
+model:
+  hidden_dim: 256
+  heads: 4
+  layers: 2
+  epochs: 200
+  patience: 15
+  learning_rate: 0.001
+  batch_size: 128
+  folds: 3
+  max_train_cells: 20000
+  max_relations: 6
+  max_peers: 8
+  device: auto
+  embedding_backend: lexical
+llm:
+  backend: disabled
+  max_output_tokens: 4096
+  max_pseudo_judgments: 128
+  allow_revision: true

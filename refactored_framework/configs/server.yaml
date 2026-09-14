@@ -1,0 +1,9 @@
+extends: default.yaml
+model:
+  device: cuda
+  embedding_backend: semantic
+  semantic_path: ${SEMANTIC_MODEL_PATH}
+llm:
+  backend: openai
+  tokenizer_path: ${LLM_TOKENIZER_PATH}
+  token_counter: transformers

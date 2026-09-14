@@ -1,0 +1,16 @@
+extends: default.yaml
+model:
+  hidden_dim: 32
+  heads: 4
+  layers: 2
+  epochs: 2
+  patience: 2
+  batch_size: 64
+  max_train_cells: 256
+  device: cpu
+  embedding_backend: lexical
+llm:
+  backend: fixture
+  token_counter: fixture_bytes
+  fixture_path: ../tests/fixtures/llm_responses.json
+  max_output_tokens: 512

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hypergraph-ed"
+version = "0.1.0"
+description = "Budgeted LLM-induced constraint hypergraphs for tabular error detection"
+requires-python = ">=3.9,<3.13"
+dependencies = ["numpy>=1.23,<3", "pandas>=2,<3", "torch>=2.1,<3", "scikit-learn>=1.2,<2", "pydantic>=2.7,<3", "PyYAML>=6,<7", "openai>=1.30,<3", "rapidfuzz>=3,<4", "regex>=2022"]
+
+[project.optional-dependencies]
+semantic = ["sentence-transformers>=3,<6", "transformers>=4.40,<5"]
+test = ["pytest>=7,<9", "build>=1,<2"]
+
+[project.scripts]
+hypergraph-ed = "hypergraph_ed.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
